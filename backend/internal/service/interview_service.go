@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"interview-ai/backend/internal/llm"
 	"interview-ai/backend/internal/model"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var (
@@ -14,10 +17,12 @@ var (
 	ErrJobDescriptionRequired = errors.New("job_description is required")
 	ErrUserProfileRequired    = errors.New("user_profile is required")
 	ErrQuestionCountRange     = errors.New("question_count must be between 1 and 10")
+	ErrInterviewNotFound      = errors.New("interview not found")
 )
 
 type InterviewRepository interface {
 	CreateWithQuestions(ctx context.Context, input model.CreateInterviewRequest, questions []llm.GeneratedQuestion) (model.CreateInterviewResponse, error)
+	GetByID(ctx context.Context, interviewID string) (model.InterviewDetail, error)
 }
 
 type InterviewService struct {
@@ -58,4 +63,49 @@ func (s *InterviewService) CreateInterview(ctx context.Context, input model.Crea
 	}
 
 	return s.repository.CreateWithQuestions(ctx, input, questions)
+}
+
+func (s *InterviewService) GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error) {
+	detail, err := s.repository.GetByID(ctx, interviewID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, ErrInterviewNotFound) {
+			return model.InterviewDetailResponse{}, ErrInterviewNotFound
+		}
+		return model.InterviewDetailResponse{}, err
+	}
+
+	return mapInterviewDetailResponse(detail), nil
+}
+
+func mapInterviewDetailResponse(detail model.InterviewDetail) model.InterviewDetailResponse {
+	questions := make([]model.QuestionResponse, 0, len(detail.Questions))
+	for _, question := range detail.Questions {
+		questions = append(questions, model.QuestionResponse{
+			ID:    question.ID,
+			Order: question.Order,
+			Text:  question.Text,
+		})
+	}
+
+	answers := make([]model.AnswerResponse, 0, len(detail.Answers))
+	for _, answer := range detail.Answers {
+		answers = append(answers, model.AnswerResponse{
+			ID:             answer.ID,
+			QuestionID:     answer.QuestionID,
+			AudioPath:      answer.AudioPath,
+			TranscriptText: answer.TranscriptText,
+			CreatedAt:      answer.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return model.InterviewDetailResponse{
+		ID:             detail.ID,
+		JobTitle:       detail.JobTitle,
+		JobDescription: detail.JobDescription,
+		UserProfile:    detail.UserProfile,
+		QuestionCount:  detail.QuestionCount,
+		Status:         detail.Status,
+		Questions:      questions,
+		Answers:        answers,
+	}
 }

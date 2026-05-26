@@ -15,11 +15,13 @@ import (
 
 type InterviewService interface {
 	CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error)
+	GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error)
 }
 
 func NewInterviewHandler(interviewService InterviewService) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/", createInterview(interviewService))
+	router.Get("/{interviewID}", getInterview(interviewService))
 	return router
 }
 
@@ -47,6 +49,25 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusCreated, response)
+	}
+}
+
+func getInterview(interviewService InterviewService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		interviewID := chi.URLParam(r, "interviewID")
+		response, err := interviewService.GetInterview(r.Context(), interviewID)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrInterviewNotFound):
+				writeError(w, http.StatusNotFound, err.Error())
+			default:
+				log.Printf("get interview: %v", err)
+				writeError(w, http.StatusInternalServerError, "failed to get interview")
+			}
+			return
+		}
+
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 

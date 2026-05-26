@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 3 - 建立面試 API
+- Current step: Step 4 - 查詢面試 API
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -15,7 +15,7 @@
 | 1 | 專案骨架 | Completed | Docker Compose 可啟動，health check 正常，前端首頁可見 |
 | 2 | DB schema 與 migration | Completed | PostgreSQL 可看到 interviews、questions、answers 三張表 |
 | 3 | 建立面試 API | Completed | 可建立 interview 與 mock questions |
-| 4 | 查詢面試 API | Not started | 可查詢 interview、questions、answers |
+| 4 | 查詢面試 API | Completed | 可查詢 interview、questions、answers |
 | 5 | 前端建立面試表單 | Not started | 使用者可從 UI 建立面試 |
 | 6 | LLM 產生問題 | Not started | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
 | 7 | 模擬面試頁 | Not started | 使用者可逐題瀏覽面試問題 |
@@ -96,11 +96,29 @@ Verification:
 - `POST /api/interviews` returned an interview id with `questions_ready`.
 - PostgreSQL contained the created interview row and 3 generated question rows.
 
+### Step 4 - 查詢面試 API
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `GET /api/interviews/{id}`.
+- Returned interview details with generated questions.
+- Returned answers array for future uploaded answers.
+- Added 404 handling for missing interviews.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `GET /api/interviews/{id}` returned the interview created by `POST /api/interviews`.
+- Response included `questions` and `answers`.
+
 ## Next Step
 
-Step 4 - 查詢面試 API.
+Step 5 - 前端建立面試表單.
 
 Expected work:
 
-- Implement `GET /api/interviews/{id}`.
-- Return interview details with questions and answers.
+- Create `/interviews/new`.
+- Submit the form to `POST /api/interviews`.
+- Navigate to an interview detail route after successful creation.

@@ -85,6 +85,14 @@ docker compose exec postgres psql -U interview_ai -d interview_ai -c "SELECT id,
 docker compose exec postgres psql -U interview_ai -d interview_ai -c "SELECT question_order, question_text FROM questions WHERE interview_id = (SELECT id FROM interviews ORDER BY created_at DESC LIMIT 1) ORDER BY question_order;"
 ```
 
+Get Interview API:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/api/interviews/<interview_uuid>" `
+  -Method Get |
+  ConvertTo-Json -Depth 5
+```
+
 前端首頁：
 
 ```text

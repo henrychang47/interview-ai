@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"interview-ai/backend/internal/llm"
 	"interview-ai/backend/internal/model"
@@ -57,4 +58,89 @@ func (r *InterviewRepository) CreateWithQuestions(
 		ID:     interviewID,
 		Status: model.InterviewStatusQuestionsReady,
 	}, nil
+}
+
+func (r *InterviewRepository) GetByID(ctx context.Context, interviewID string) (model.InterviewDetail, error) {
+	var detail model.InterviewDetail
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, job_title, job_description, user_profile, question_count, status
+		FROM interviews
+		WHERE id = $1
+	`, interviewID).Scan(
+		&detail.ID,
+		&detail.JobTitle,
+		&detail.JobDescription,
+		&detail.UserProfile,
+		&detail.QuestionCount,
+		&detail.Status,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.InterviewDetail{}, pgx.ErrNoRows
+		}
+		return model.InterviewDetail{}, err
+	}
+
+	questionRows, err := r.pool.Query(ctx, `
+		SELECT id, interview_id, question_order, question_text, created_at
+		FROM questions
+		WHERE interview_id = $1
+		ORDER BY question_order
+	`, interviewID)
+	if err != nil {
+		return model.InterviewDetail{}, err
+	}
+	defer questionRows.Close()
+
+	questions := make([]model.Question, 0)
+	for questionRows.Next() {
+		var question model.Question
+		if err := questionRows.Scan(
+			&question.ID,
+			&question.InterviewID,
+			&question.Order,
+			&question.Text,
+			&question.CreatedAt,
+		); err != nil {
+			return model.InterviewDetail{}, err
+		}
+		questions = append(questions, question)
+	}
+	if err := questionRows.Err(); err != nil {
+		return model.InterviewDetail{}, err
+	}
+
+	answerRows, err := r.pool.Query(ctx, `
+		SELECT id, interview_id, question_id, audio_path, transcript_text, created_at
+		FROM answers
+		WHERE interview_id = $1
+		ORDER BY created_at
+	`, interviewID)
+	if err != nil {
+		return model.InterviewDetail{}, err
+	}
+	defer answerRows.Close()
+
+	answers := make([]model.Answer, 0)
+	for answerRows.Next() {
+		var answer model.Answer
+		if err := answerRows.Scan(
+			&answer.ID,
+			&answer.InterviewID,
+			&answer.QuestionID,
+			&answer.AudioPath,
+			&answer.TranscriptText,
+			&answer.CreatedAt,
+		); err != nil {
+			return model.InterviewDetail{}, err
+		}
+		answers = append(answers, answer)
+	}
+	if err := answerRows.Err(); err != nil {
+		return model.InterviewDetail{}, err
+	}
+
+	detail.Questions = questions
+	detail.Answers = answers
+	return detail, nil
 }

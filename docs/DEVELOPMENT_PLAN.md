@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 3 - 建立面試 API
+- Current step: Step 4 - 查詢面試 API
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -15,7 +15,7 @@
 | 1 | 專案骨架 | Completed |
 | 2 | DB schema 與 migration | Completed |
 | 3 | 建立面試 API | Completed |
-| 4 | 查詢面試 API | Not started |
+| 4 | 查詢面試 API | Completed |
 | 5 | 前端建立面試表單 | Not started |
 | 6 | LLM 產生問題 | Not started |
 | 7 | 模擬面試頁 | Not started |
@@ -41,6 +41,23 @@ Verification:
 - `POST /api/interviews` returned an interview id with `questions_ready`.
 - PostgreSQL contained the created interview row and requested number of question rows.
 
+## Step 4 Completion
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `GET /api/interviews/{id}`.
+- Returned interview details with generated questions.
+- Returned answers array for future uploaded answers.
+- Added 404 handling for missing interviews.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `GET /api/interviews/{id}` returned the interview created by `POST /api/interviews`.
+- Response included `questions` and `answers`.
+
 ## Next Step
 
-Step 4 - 查詢面試 API.
+Step 5 - 前端建立面試表單.

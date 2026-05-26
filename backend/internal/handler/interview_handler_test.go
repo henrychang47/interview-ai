@@ -85,6 +85,61 @@ func TestCreateInterviewReturnsServerError(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusInternalServerError, "failed to create interview")
 }
 
+func TestGetInterviewReturnsDetail(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{
+		detailResponse: model.InterviewDetailResponse{
+			ID:             "interview-id",
+			JobTitle:       "後端工程師",
+			JobDescription: "需要熟悉 Go",
+			UserProfile:    "有 Go 學習經驗",
+			QuestionCount:  1,
+			Status:         model.InterviewStatusQuestionsReady,
+			Questions: []model.QuestionResponse{
+				{ID: "question-id", Order: 1, Text: "問題一"},
+			},
+			Answers: []model.AnswerResponse{},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	var body model.InterviewDetailResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("expected JSON response, got error: %v", err)
+	}
+	if body.ID != "interview-id" {
+		t.Fatalf("expected interview id, got %q", body.ID)
+	}
+	if len(body.Questions) != 1 || body.Questions[0].Text != "問題一" {
+		t.Fatalf("expected questions response, got %+v", body.Questions)
+	}
+}
+
+func TestGetInterviewReturnsNotFound(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{getErr: service.ErrInterviewNotFound})
+	request := httptest.NewRequest(http.MethodGet, "/missing-id", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusNotFound, "interview not found")
+}
+
+func TestGetInterviewReturnsServerError(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{getErr: errors.New("db failed")})
+	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusInternalServerError, "failed to get interview")
+}
+
 func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, status int, message string) {
 	t.Helper()
 	if response.Code != status {
@@ -100,10 +155,16 @@ func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, stat
 }
 
 type stubInterviewService struct {
-	response model.CreateInterviewResponse
-	err      error
+	response       model.CreateInterviewResponse
+	err            error
+	detailResponse model.InterviewDetailResponse
+	getErr         error
 }
 
 func (s *stubInterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
 	return s.response, s.err
+}
+
+func (s *stubInterviewService) GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error) {
+	return s.detailResponse, s.getErr
 }
