@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 7 - 模擬面試頁
+- Current step: Step 8 - TTS 朗讀題目
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -19,7 +19,7 @@
 | 5 | 前端建立面試表單 | Completed |
 | 6 | LLM 產生問題 | Completed |
 | 7 | 模擬面試頁 | Completed |
-| 8 | TTS 朗讀題目 | Not started |
+| 8 | TTS 朗讀題目 | Completed |
 | 9 | 前端錄音 | Not started |
 | 10 | 回答音檔上傳 API | Not started |
 | 11 | 完成整場面試流程 | Not started |
@@ -112,6 +112,25 @@ Verification:
 - `npm run build --prefix frontend` passed.
 - Manual browser verification confirmed users can open a session and move between questions.
 
+## Step 8 Completion
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added a browser SpeechSynthesis playback button to the session page.
+- Read the current question aloud with `zh-TW` language.
+- Cancelled existing speech before starting playback to avoid overlap.
+- Stopped speech when moving between questions or leaving the session page.
+- Disabled playback with a clear message when the browser does not support TTS.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- `go test ./...` passed in `backend`.
+- Manual browser verification confirmed pressing `朗讀題目` starts playback for the current question, moving to `下一題` stops prior playback, and pressing `朗讀題目` again starts playback for the new current question.
+
 ## Next Step
 
-Step 8 - TTS 朗讀題目.
+Step 9 - 前端錄音.

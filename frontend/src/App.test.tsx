@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -15,6 +15,39 @@ function mockFetchOnce(response: unknown, init: ResponseInit = {}) {
       headers: { 'Content-Type': 'application/json' },
     }),
   )
+}
+
+type MockUtterance = {
+  text: string
+  lang: string
+  onend: (() => void) | null
+  onerror: (() => void) | null
+}
+
+function installSpeechSynthesisMock() {
+  const speak = vi.fn()
+  const cancel = vi.fn()
+  const utterances: MockUtterance[] = []
+
+  class MockSpeechSynthesisUtterance {
+    text: string
+    lang = ''
+    onend: (() => void) | null = null
+    onerror: (() => void) | null = null
+
+    constructor(text: string) {
+      this.text = text
+      utterances.push(this)
+    }
+  }
+
+  vi.stubGlobal('speechSynthesis', {
+    speak,
+    cancel,
+  })
+  vi.stubGlobal('SpeechSynthesisUtterance', MockSpeechSynthesisUtterance)
+
+  return { speak, cancel, utterances }
 }
 
 describe('App', () => {
@@ -154,6 +187,161 @@ describe('App', () => {
     expect(screen.getByText('後端工程師')).toBeInTheDocument()
     expect(screen.getByText('第 1 題 / 共 2 題')).toBeInTheDocument()
     expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+  })
+
+  it('speaks the current session question when the play button is clicked', async () => {
+    const speech = installSpeechSynthesisMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
+
+    expect(speech.cancel).toHaveBeenCalledTimes(1)
+    expect(speech.speak).toHaveBeenCalledTimes(1)
+    expect(speech.utterances[0].text).toBe('請介紹你過去與後端開發相關的經驗。')
+    expect(speech.utterances[0].lang).toBe('zh-TW')
+    expect(screen.getByRole('button', { name: '朗讀中' })).toBeDisabled()
+
+    act(() => {
+      speech.utterances[0].onend?.()
+    })
+
+    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeEnabled()
+  })
+
+  it('cancels existing speech before speaking the question again', async () => {
+    const speech = installSpeechSynthesisMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
+    act(() => {
+      speech.utterances[0].onend?.()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
+
+    expect(speech.cancel).toHaveBeenCalledTimes(2)
+    expect(speech.speak).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops speech when moving to another question', async () => {
+    const speech = installSpeechSynthesisMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
+
+    expect(speech.cancel).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeEnabled()
+  })
+
+  it('stops speech when leaving the session page', async () => {
+    const speech = installSpeechSynthesisMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    const { unmount } = render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
+    unmount()
+
+    expect(speech.cancel).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables question playback when speech synthesis is unavailable', async () => {
+    vi.stubGlobal('speechSynthesis', undefined)
+    vi.stubGlobal('SpeechSynthesisUtterance', undefined)
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeDisabled()
+    expect(screen.getByText('此瀏覽器不支援題目朗讀。')).toBeInTheDocument()
   })
 
   it('moves between session questions with previous and next buttons', async () => {
