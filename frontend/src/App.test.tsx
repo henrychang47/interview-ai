@@ -520,6 +520,46 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
   })
 
+  it('shows a helpful message when no microphone device is available', async () => {
+    installObjectURLMock()
+    const deviceError = new Error('Requested device not found')
+    deviceError.name = 'NotFoundError'
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(deviceError),
+      },
+    })
+    vi.stubGlobal('MediaRecorder', class MockMediaRecorder {})
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    expect(
+      await screen.findByText('找不到可用的麥克風，請確認裝置已連接，並在瀏覽器或系統設定中允許麥克風。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Requested device not found')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
+  })
+
   it('disables answer recording when MediaRecorder is unavailable', async () => {
     installObjectURLMock()
     Object.defineProperty(navigator, 'mediaDevices', {

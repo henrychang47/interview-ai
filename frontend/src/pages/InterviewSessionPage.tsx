@@ -7,6 +7,26 @@ type InterviewSessionPageProps = {
   interviewID: string
 }
 
+function getRecordingErrorMessage(error: unknown) {
+  if (error instanceof DOMException || error instanceof Error) {
+    if (
+      error.name === 'NotFoundError' ||
+      error.name === 'DevicesNotFoundError' ||
+      error.message.toLowerCase().includes('device not found')
+    ) {
+      return '找不到可用的麥克風，請確認裝置已連接，並在瀏覽器或系統設定中允許麥克風。'
+    }
+
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      return '麥克風權限已被拒絕，請在瀏覽器設定中允許此網站使用麥克風。'
+    }
+
+    return error.message
+  }
+
+  return '無法開始錄音'
+}
+
 export default function InterviewSessionPage({ interviewID }: InterviewSessionPageProps) {
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -162,7 +182,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     } catch (error) {
       setIsRecordingAnswer(false)
       stopMediaStream()
-      setRecordingError(error instanceof Error ? error.message : '無法開始錄音')
+      setRecordingError(getRecordingErrorMessage(error))
     }
   }
 
