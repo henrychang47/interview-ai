@@ -119,6 +119,22 @@ When running the frontend outside Docker, make sure the backend is on `http://lo
 $env:VITE_API_PROXY_TARGET='http://localhost:8080'
 ```
 
+## Question Generation Mode
+
+By default, the backend uses mock question generation when `OPENAI_API_KEY` is empty.
+
+To enable OpenAI-backed question generation:
+
+```powershell
+$env:OPENAI_API_KEY='<your_api_key>'
+$env:OPENAI_MODEL='gpt-5.4-mini'
+docker compose up --build -d backend frontend
+```
+
+Never commit real API keys. Keep local secrets in `.env`.
+
+When OpenAI mode is enabled, the backend sends the interview `job_title`, `job_description`, and `user_profile` to OpenAI to generate questions. Test data is stored in PostgreSQL, and future answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
+
 ## Local Checks
 
 後端：

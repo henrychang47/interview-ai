@@ -29,7 +29,7 @@ func main() {
 	defer pool.Close()
 
 	interviewRepository := repository.NewInterviewRepository(pool)
-	questionGenerator := llm.MockQuestionGenerator{}
+	questionGenerator := questionGeneratorForConfig(cfg)
 	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
 	interviewHandler := handler.NewInterviewHandler(interviewService)
 
@@ -37,6 +37,19 @@ func main() {
 	if err := http.ListenAndServe(":8080", newRouter(interviewHandler)); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
+}
+
+func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
+	if cfg.OpenAIAPIKey == "" {
+		log.Println("OPENAI_API_KEY is not configured; using mock question generator")
+		return llm.MockQuestionGenerator{}
+	}
+
+	log.Printf("OPENAI_API_KEY is configured; using OpenAI question generator with model %s", cfg.OpenAIModel)
+	return llm.NewOpenAIQuestionGenerator(llm.OpenAIQuestionGeneratorConfig{
+		APIKey: cfg.OpenAIAPIKey,
+		Model:  cfg.OpenAIModel,
+	})
 }
 
 func newRouter(interviewHandler http.Handler) http.Handler {

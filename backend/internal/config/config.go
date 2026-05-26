@@ -4,12 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DatabaseURL string
+	DatabaseURL  string
+	OpenAIAPIKey string
+	OpenAIModel  string
 }
 
 func Load() (Config, error) {
@@ -21,6 +24,11 @@ func Load() (Config, error) {
 	postgresUser := os.Getenv("POSTGRES_USER")
 	postgresPassword := os.Getenv("POSTGRES_PASSWORD")
 	postgresDB := os.Getenv("POSTGRES_DB")
+	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	openAIModel := strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
+	if openAIModel == "" {
+		openAIModel = "gpt-5.4-mini"
+	}
 
 	if postgresHost == "" {
 		return Config{}, errors.New("POSTGRES_HOST is required")
@@ -47,5 +55,9 @@ func Load() (Config, error) {
 		postgresDB,
 	)
 
-	return Config{DatabaseURL: databaseURL}, nil
+	return Config{
+		DatabaseURL:  databaseURL,
+		OpenAIAPIKey: openAIAPIKey,
+		OpenAIModel:  openAIModel,
+	}, nil
 }

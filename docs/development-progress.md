@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 5 - 前端建立面試表單
+- Current step: Step 6 - LLM 產生問題
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -17,7 +17,7 @@
 | 3 | 建立面試 API | Completed | 可建立 interview 與 mock questions |
 | 4 | 查詢面試 API | Completed | 可查詢 interview、questions、answers |
 | 5 | 前端建立面試表單 | Completed | 使用者可從 UI 建立面試 |
-| 6 | LLM 產生問題 | Not started | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
+| 6 | LLM 產生問題 | Completed | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
 | 7 | 模擬面試頁 | Not started | 使用者可逐題瀏覽面試問題 |
 | 8 | TTS 朗讀題目 | Not started | 瀏覽器可朗讀目前題目 |
 | 9 | 前端錄音 | Not started | 使用者可錄音並回放 |
@@ -131,11 +131,30 @@ Verification:
 - `npm run build --prefix frontend` passed.
 - Manual browser verification confirmed creating an interview shows the generated question list.
 
+### Step 6 - LLM 產生問題
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Kept the existing `QuestionGenerator` interface.
+- Added OpenAI-backed question generation.
+- Added optional `OPENAI_API_KEY` and configurable `OPENAI_MODEL`.
+- Preserved mock question generation when no API key is configured.
+- Validated OpenAI JSON output before saving questions.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- Mock-mode create interview flow returned generated questions without `OPENAI_API_KEY`.
+- OpenAI-mode verification was skipped because no local API key was configured.
+
 ## Next Step
 
-Step 6 - LLM 產生問題.
+Step 7 - 建立模擬面試頁.
 
 Expected work:
 
-- Add real LLM question generation behind the existing generator interface.
-- Keep mock mode/fallback available when API keys are not configured.
+- Build `/interviews/{id}/session`.
+- Display the current interview question.
+- Support moving between questions.
