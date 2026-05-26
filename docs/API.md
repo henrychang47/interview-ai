@@ -75,8 +75,9 @@ Server error:
 
 Question generation:
 
-- If `OPENAI_API_KEY` is empty, the backend uses mock interview questions.
-- If `OPENAI_API_KEY` is set, the backend calls OpenAI to generate questions from `job_title`, `job_description`, and `user_profile`.
+- If `GEMINI_API_KEY` is empty, the backend uses mock interview questions.
+- If `GEMINI_API_KEY` is set, the backend calls Gemini to generate questions from `job_title`, `job_description`, and `user_profile`.
+- Gemini requests use `GEMINI_MODEL` first and fall back to `GEMINI_FALLBACK_MODEL` after retrying transient `429` or `503` failures.
 - The backend validates the LLM JSON response before saving questions.
 
 ## Get Interview

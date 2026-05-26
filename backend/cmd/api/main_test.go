@@ -30,10 +30,11 @@ func TestHealthReturnsOK(t *testing.T) {
 	}
 }
 
-func TestQuestionGeneratorForConfigUsesMockWithoutOpenAIKey(t *testing.T) {
+func TestQuestionGeneratorForConfigUsesMockWithoutGeminiKey(t *testing.T) {
 	generator := questionGeneratorForConfig(config.Config{
-		OpenAIAPIKey: "",
-		OpenAIModel:  "gpt-5.4-mini",
+		GeminiAPIKey:        "",
+		GeminiModel:         "gemini-2.5-flash",
+		GeminiFallbackModel: "gemini-2.5-flash-lite",
 	})
 
 	if _, ok := generator.(llm.MockQuestionGenerator); !ok {
@@ -41,13 +42,14 @@ func TestQuestionGeneratorForConfigUsesMockWithoutOpenAIKey(t *testing.T) {
 	}
 }
 
-func TestQuestionGeneratorForConfigUsesOpenAIWithOpenAIKey(t *testing.T) {
+func TestQuestionGeneratorForConfigUsesGeminiWithGeminiKey(t *testing.T) {
 	generator := questionGeneratorForConfig(config.Config{
-		OpenAIAPIKey: "test-key",
-		OpenAIModel:  "gpt-5.4-mini",
+		GeminiAPIKey:        "test-key",
+		GeminiModel:         "gemini-2.5-flash",
+		GeminiFallbackModel: "gemini-2.5-flash-lite",
 	})
 
-	if _, ok := generator.(*llm.OpenAIQuestionGenerator); !ok {
-		t.Fatalf("expected OpenAIQuestionGenerator, got %T", generator)
+	if _, ok := generator.(*llm.GeminiQuestionGenerator); !ok {
+		t.Fatalf("expected GeminiQuestionGenerator, got %T", generator)
 	}
 }

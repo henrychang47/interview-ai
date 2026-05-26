@@ -6,7 +6,7 @@
 
 - Current step: Step 7 - 模擬面試頁
 - Status: Completed
-- Last updated: 2026-05-26
+- Last updated: 2026-05-27
 
 ## Progress
 
@@ -83,16 +83,19 @@ Completed on 2026-05-26.
 Implemented:
 
 - Kept the existing `QuestionGenerator` interface.
-- Added OpenAI-backed question generation.
-- Added optional `OPENAI_API_KEY` and configurable `OPENAI_MODEL`.
+- Replaced OpenAI-backed question generation with Gemini-backed question generation.
+- Added optional `GEMINI_API_KEY`, configurable `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`.
 - Preserved mock question generation when no API key is configured.
-- Validated OpenAI JSON output before saving questions.
+- Added timeout, retry handling for transient Gemini `429` and `503` responses, and model fallback.
+- Fixed Gemini response body decoding so the request timeout context is released after the body is read.
+- Validated Gemini JSON output before saving questions.
 
 Verification:
 
 - `go test ./...` passed in `backend`.
-- Mock-mode create interview flow returned generated questions without `OPENAI_API_KEY`.
-- OpenAI-mode verification was skipped because no local API key was configured.
+- Mock-mode create interview flow returned generated questions without `GEMINI_API_KEY`.
+- Gemini live API call returned structured JSON with `gemini-2.5-flash`.
+- Manual create-interview verification with `GEMINI_API_KEY` configured completed successfully.
 
 ## Step 7 Completion
 

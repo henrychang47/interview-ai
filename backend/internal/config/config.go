@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	DatabaseURL  string
-	OpenAIAPIKey string
-	OpenAIModel  string
+	DatabaseURL         string
+	GeminiAPIKey        string
+	GeminiModel         string
+	GeminiFallbackModel string
 }
 
 func Load() (Config, error) {
@@ -24,10 +25,14 @@ func Load() (Config, error) {
 	postgresUser := os.Getenv("POSTGRES_USER")
 	postgresPassword := os.Getenv("POSTGRES_PASSWORD")
 	postgresDB := os.Getenv("POSTGRES_DB")
-	openAIAPIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	openAIModel := strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
-	if openAIModel == "" {
-		openAIModel = "gpt-5.4-mini"
+	geminiAPIKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	geminiModel := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+	if geminiModel == "" {
+		geminiModel = "gemini-2.5-flash"
+	}
+	geminiFallbackModel := strings.TrimSpace(os.Getenv("GEMINI_FALLBACK_MODEL"))
+	if geminiFallbackModel == "" {
+		geminiFallbackModel = "gemini-2.5-flash-lite"
 	}
 
 	if postgresHost == "" {
@@ -56,8 +61,9 @@ func Load() (Config, error) {
 	)
 
 	return Config{
-		DatabaseURL:  databaseURL,
-		OpenAIAPIKey: openAIAPIKey,
-		OpenAIModel:  openAIModel,
+		DatabaseURL:         databaseURL,
+		GeminiAPIKey:        geminiAPIKey,
+		GeminiModel:         geminiModel,
+		GeminiFallbackModel: geminiFallbackModel,
 	}, nil
 }

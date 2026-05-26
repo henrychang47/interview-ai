@@ -40,15 +40,16 @@ func main() {
 }
 
 func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
-	if cfg.OpenAIAPIKey == "" {
-		log.Println("OPENAI_API_KEY is not configured; using mock question generator")
+	if cfg.GeminiAPIKey == "" {
+		log.Println("GEMINI_API_KEY is not configured; using mock question generator")
 		return llm.MockQuestionGenerator{}
 	}
 
-	log.Printf("OPENAI_API_KEY is configured; using OpenAI question generator with model %s", cfg.OpenAIModel)
-	return llm.NewOpenAIQuestionGenerator(llm.OpenAIQuestionGeneratorConfig{
-		APIKey: cfg.OpenAIAPIKey,
-		Model:  cfg.OpenAIModel,
+	log.Printf("GEMINI_API_KEY is configured; using Gemini question generator with model %s and fallback model %s", cfg.GeminiModel, cfg.GeminiFallbackModel)
+	return llm.NewGeminiQuestionGenerator(llm.GeminiQuestionGeneratorConfig{
+		APIKey:        cfg.GeminiAPIKey,
+		Model:         cfg.GeminiModel,
+		FallbackModel: cfg.GeminiFallbackModel,
 	})
 }
 

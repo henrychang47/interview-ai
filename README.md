@@ -121,19 +121,20 @@ $env:VITE_API_PROXY_TARGET='http://localhost:8080'
 
 ## Question Generation Mode
 
-By default, the backend uses mock question generation when `OPENAI_API_KEY` is empty.
+By default, the backend uses mock question generation when `GEMINI_API_KEY` is empty.
 
-To enable OpenAI-backed question generation:
+To enable Gemini-backed question generation:
 
 ```powershell
-$env:OPENAI_API_KEY='<your_api_key>'
-$env:OPENAI_MODEL='gpt-5.4-mini'
+$env:GEMINI_API_KEY='<your_api_key>'
+$env:GEMINI_MODEL='gemini-2.5-flash'
+$env:GEMINI_FALLBACK_MODEL='gemini-2.5-flash-lite'
 docker compose up --build -d backend frontend
 ```
 
 Never commit real API keys. Keep local secrets in `.env`.
 
-When OpenAI mode is enabled, the backend sends the interview `job_title`, `job_description`, and `user_profile` to OpenAI to generate questions. Test data is stored in PostgreSQL, and future answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
+When Gemini mode is enabled, the backend sends the interview `job_title`, `job_description`, and `user_profile` to Gemini to generate questions. Transient Gemini `429` and `503` responses are retried before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and future answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
 
 ## Local Checks
 
