@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 4 - 查詢面試 API
+- Current step: Step 5 - 前端建立面試表單
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -16,7 +16,7 @@
 | 2 | DB schema 與 migration | Completed |
 | 3 | 建立面試 API | Completed |
 | 4 | 查詢面試 API | Completed |
-| 5 | 前端建立面試表單 | Not started |
+| 5 | 前端建立面試表單 | Completed |
 | 6 | LLM 產生問題 | Not started |
 | 7 | 模擬面試頁 | Not started |
 | 8 | TTS 朗讀題目 | Not started |
@@ -58,6 +58,24 @@ Verification:
 - `GET /api/interviews/{id}` returned the interview created by `POST /api/interviews`.
 - Response included `questions` and `answers`.
 
+## Step 5 Completion
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `/interviews/new` frontend route.
+- Added create interview form.
+- Submitted form data to `POST /api/interviews`.
+- Navigated to `/interviews/{id}` after successful creation.
+- Added minimal detail page that loads `GET /api/interviews/{id}` and displays questions.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Manual browser verification confirmed creating an interview shows the generated question list.
+
 ## Next Step
 
-Step 5 - 前端建立面試表單.
+Step 6 - LLM 產生問題.

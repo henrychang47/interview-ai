@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 4 - 查詢面試 API
+- Current step: Step 5 - 前端建立面試表單
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -16,7 +16,7 @@
 | 2 | DB schema 與 migration | Completed | PostgreSQL 可看到 interviews、questions、answers 三張表 |
 | 3 | 建立面試 API | Completed | 可建立 interview 與 mock questions |
 | 4 | 查詢面試 API | Completed | 可查詢 interview、questions、answers |
-| 5 | 前端建立面試表單 | Not started | 使用者可從 UI 建立面試 |
+| 5 | 前端建立面試表單 | Completed | 使用者可從 UI 建立面試 |
 | 6 | LLM 產生問題 | Not started | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
 | 7 | 模擬面試頁 | Not started | 使用者可逐題瀏覽面試問題 |
 | 8 | TTS 朗讀題目 | Not started | 瀏覽器可朗讀目前題目 |
@@ -113,12 +113,29 @@ Verification:
 - `GET /api/interviews/{id}` returned the interview created by `POST /api/interviews`.
 - Response included `questions` and `answers`.
 
+### Step 5 - 前端建立面試表單
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `/interviews/new` frontend route.
+- Added create interview form.
+- Submitted form data to `POST /api/interviews`.
+- Navigated to `/interviews/{id}` after successful creation.
+- Added minimal detail page that loads `GET /api/interviews/{id}` and displays questions.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Manual browser verification confirmed creating an interview shows the generated question list.
+
 ## Next Step
 
-Step 5 - 前端建立面試表單.
+Step 6 - LLM 產生問題.
 
 Expected work:
 
-- Create `/interviews/new`.
-- Submit the form to `POST /api/interviews`.
-- Navigate to an interview detail route after successful creation.
+- Add real LLM question generation behind the existing generator interface.
+- Keep mock mode/fallback available when API keys are not configured.

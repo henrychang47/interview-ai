@@ -1,14 +1,127 @@
 import '@testing-library/jest-dom/vitest'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 
+function mockPathname(pathname: string) {
+  window.history.pushState({}, '', pathname)
+}
+
+function mockFetchOnce(response: unknown, init: ResponseInit = {}) {
+  return vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(response), {
+      status: init.status ?? 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+}
+
 describe('App', () => {
+  beforeEach(() => {
+    mockPathname('/')
+    vi.restoreAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    window.history.pushState({}, '', '/')
+  })
+
   it('renders the interview practice homepage', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: '模擬面試應用' })).toBeInTheDocument()
     expect(screen.getByText('建立面試、產生題目、錄音回答，逐步打通 MVP 主流程。')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '建立新的模擬面試' })).toHaveAttribute(
+      'href',
+      '/interviews/new',
+    )
+  })
+
+  it('renders the create interview form at /interviews/new', () => {
+    mockPathname('/interviews/new')
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: '建立模擬面試' })).toBeInTheDocument()
+    expect(screen.getByLabelText('職位名稱')).toBeInTheDocument()
+    expect(screen.getByLabelText('職位要求及說明')).toBeInTheDocument()
+    expect(screen.getByLabelText('個人資訊')).toBeInTheDocument()
+    expect(screen.getByLabelText('題目數量')).toHaveValue(3)
+  })
+
+  it('submits the create interview form and navigates to detail route', async () => {
+    mockPathname('/interviews/new')
+    const fetchMock = mockFetchOnce({ id: 'interview-123', status: 'questions_ready' })
+    vi.stubGlobal('fetch', fetchMock)
+    const pushState = vi.spyOn(window.history, 'pushState')
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('職位名稱'), { target: { value: '後端工程師' } })
+    fireEvent.change(screen.getByLabelText('職位要求及說明'), {
+      target: { value: '需要熟悉 Go、PostgreSQL、REST API' },
+    })
+    fireEvent.change(screen.getByLabelText('個人資訊'), {
+      target: { value: '有 Java 和 Go 學習經驗' },
+    })
+    fireEvent.change(screen.getByLabelText('題目數量'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/interviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          job_title: '後端工程師',
+          job_description: '需要熟悉 Go、PostgreSQL、REST API',
+          user_profile: '有 Java 和 Go 學習經驗',
+          question_count: 3,
+        }),
+      })
+    })
+    expect(pushState).toHaveBeenCalledWith({}, '', '/interviews/interview-123')
+  })
+
+  it('shows an API error when create interview fails', async () => {
+    mockPathname('/interviews/new')
+    vi.stubGlobal('fetch', mockFetchOnce({ error: 'job_title is required' }, { status: 400 }))
+
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
+
+    expect(await screen.findByText('job_title is required')).toBeInTheDocument()
+  })
+
+  it('loads interview details and displays questions at /interviews/:id', async () => {
+    mockPathname('/interviews/interview-123')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '後端工程師' })).toBeInTheDocument()
+    expect(screen.getByText('questions_ready')).toBeInTheDocument()
+    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
   })
 })

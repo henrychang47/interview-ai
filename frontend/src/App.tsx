@@ -1,6 +1,39 @@
+import { useState } from 'react'
+
+import InterviewDetailPage from './pages/InterviewDetailPage'
+import NewInterviewPage from './pages/NewInterviewPage'
+
 const workflowItems = ['輸入職位資訊', '產生面試問題', '錄音回答', '查看結果']
 
+function getRoute(pathname: string) {
+  if (pathname === '/interviews/new') {
+    return { name: 'new' as const }
+  }
+
+  const detailMatch = pathname.match(/^\/interviews\/([^/]+)$/)
+  if (detailMatch) {
+    return { name: 'detail' as const, interviewID: decodeURIComponent(detailMatch[1]) }
+  }
+
+  return { name: 'home' as const }
+}
+
 export default function App() {
+  const [route, setRoute] = useState(() => getRoute(window.location.pathname))
+
+  function navigate(path: string) {
+    window.history.pushState({}, '', path)
+    setRoute(getRoute(path))
+  }
+
+  if (route.name === 'new') {
+    return <NewInterviewPage onCreated={(interviewID) => navigate(`/interviews/${interviewID}`)} />
+  }
+
+  if (route.name === 'detail') {
+    return <InterviewDetailPage interviewID={route.interviewID} />
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-6 py-12">
@@ -12,6 +45,12 @@ export default function App() {
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-700">
             建立面試、產生題目、錄音回答，逐步打通 MVP 主流程。
           </p>
+          <a
+            href="/interviews/new"
+            className="mt-8 inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+          >
+            建立新的模擬面試
+          </a>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

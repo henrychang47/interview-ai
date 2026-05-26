@@ -101,6 +101,24 @@ http://localhost:5173
 
 應可看到「模擬面試應用」首頁。
 
+建立面試表單：
+
+```text
+http://localhost:5173/interviews/new
+```
+
+手動驗收：
+
+- 輸入職位名稱、職位要求及說明、個人資訊、題目數量。
+- 送出表單後，頁面導向 `/interviews/{id}`。
+- 詳情頁顯示職位名稱、狀態與產生的題目列表。
+
+When running the frontend outside Docker, make sure the backend is on `http://localhost:8080`, or set:
+
+```powershell
+$env:VITE_API_PROXY_TARGET='http://localhost:8080'
+```
+
 ## Local Checks
 
 後端：
