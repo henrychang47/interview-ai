@@ -86,6 +86,17 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
                 ))}
               </ol>
             </section>
+
+            {interview.questions.length > 0 ? (
+              <div className="mt-8">
+                <a
+                  href={`/interviews/${interview.id}/session`}
+                  className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+                >
+                  開始模擬面試
+                </a>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

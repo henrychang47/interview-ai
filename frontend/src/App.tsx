@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import InterviewDetailPage from './pages/InterviewDetailPage'
+import InterviewSessionPage from './pages/InterviewSessionPage'
 import NewInterviewPage from './pages/NewInterviewPage'
 
 const workflowItems = ['輸入職位資訊', '產生面試問題', '錄音回答', '查看結果']
@@ -8,6 +9,11 @@ const workflowItems = ['輸入職位資訊', '產生面試問題', '錄音回答
 function getRoute(pathname: string) {
   if (pathname === '/interviews/new') {
     return { name: 'new' as const }
+  }
+
+  const sessionMatch = pathname.match(/^\/interviews\/([^/]+)\/session$/)
+  if (sessionMatch) {
+    return { name: 'session' as const, interviewID: decodeURIComponent(sessionMatch[1]) }
   }
 
   const detailMatch = pathname.match(/^\/interviews\/([^/]+)$/)
@@ -28,6 +34,10 @@ export default function App() {
 
   if (route.name === 'new') {
     return <NewInterviewPage onCreated={(interviewID) => navigate(`/interviews/${interviewID}`)} />
+  }
+
+  if (route.name === 'session') {
+    return <InterviewSessionPage interviewID={route.interviewID} />
   }
 
   if (route.name === 'detail') {

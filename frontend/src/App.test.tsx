@@ -123,5 +123,104 @@ describe('App', () => {
     expect(screen.getByText('questions_ready')).toBeInTheDocument()
     expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
     expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '開始模擬面試' })).toHaveAttribute(
+      'href',
+      '/interviews/interview-123/session',
+    )
+  })
+
+  it('loads the interview session page at /interviews/:id/session', async () => {
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '模擬面試進行中' })).toBeInTheDocument()
+    expect(screen.getByText('後端工程師')).toBeInTheDocument()
+    expect(screen.getByText('第 1 題 / 共 2 題')).toBeInTheDocument()
+    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+  })
+
+  it('moves between session questions with previous and next buttons', async () => {
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一題' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '下一題' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
+
+    expect(screen.getByText('第 2 題 / 共 2 題')).toBeInTheDocument()
+    expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一題' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '下一題' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '上一題' }))
+
+    expect(screen.getByText('第 1 題 / 共 2 題')).toBeInTheDocument()
+    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+  })
+
+  it('shows an empty state when a session has no questions', async () => {
+    mockPathname('/interviews/interview-empty/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-empty',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 學習經驗',
+        question_count: 0,
+        status: 'questions_ready',
+        questions: [],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('這場面試目前沒有題目。')).toBeInTheDocument()
+  })
+
+  it('shows an API error when loading a session fails', async () => {
+    mockPathname('/interviews/missing/session')
+    vi.stubGlobal('fetch', mockFetchOnce({ error: 'interview not found' }, { status: 404 }))
+
+    render(<App />)
+
+    expect(await screen.findByText('interview not found')).toBeInTheDocument()
   })
 })

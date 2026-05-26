@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 6 - LLM 產生問題
+- Current step: Step 7 - 模擬面試頁
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -18,7 +18,7 @@
 | 4 | 查詢面試 API | Completed |
 | 5 | 前端建立面試表單 | Completed |
 | 6 | LLM 產生問題 | Completed |
-| 7 | 模擬面試頁 | Not started |
+| 7 | 模擬面試頁 | Completed |
 | 8 | TTS 朗讀題目 | Not started |
 | 9 | 前端錄音 | Not started |
 | 10 | 回答音檔上傳 API | Not started |
@@ -94,6 +94,24 @@ Verification:
 - Mock-mode create interview flow returned generated questions without `OPENAI_API_KEY`.
 - OpenAI-mode verification was skipped because no local API key was configured.
 
+## Step 7 Completion
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `/interviews/{id}/session` frontend route.
+- Loaded interview details through the existing `GET /api/interviews/{id}` client.
+- Displayed one current question at a time.
+- Added previous and next navigation with boundary button states.
+- Added a start-session link from the interview detail page.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Manual browser verification confirmed users can open a session and move between questions.
+
 ## Next Step
 
-Step 7 - 建立模擬面試頁.
+Step 8 - TTS 朗讀題目.
