@@ -50,6 +50,76 @@ function installSpeechSynthesisMock() {
   return { speak, cancel, utterances }
 }
 
+type MockMediaRecorderInstance = {
+  stream: MediaStream
+  state: 'inactive' | 'recording'
+  ondataavailable: ((event: BlobEvent) => void) | null
+  onstop: (() => void) | null
+  start: ReturnType<typeof vi.fn>
+  stop: ReturnType<typeof vi.fn>
+}
+
+function installMediaRecorderMock() {
+  const trackStop = vi.fn()
+  const stream = {
+    getTracks: () => [{ stop: trackStop }],
+  } as unknown as MediaStream
+  const getUserMedia = vi.fn().mockResolvedValue(stream)
+  const recorders: MockMediaRecorderInstance[] = []
+
+  class MockMediaRecorder {
+    stream: MediaStream
+    state: 'inactive' | 'recording' = 'inactive'
+    ondataavailable: ((event: BlobEvent) => void) | null = null
+    onstop: (() => void) | null = null
+
+    constructor(stream: MediaStream) {
+      this.stream = stream
+      recorders.push(this as unknown as MockMediaRecorderInstance)
+    }
+
+    start = vi.fn(() => {
+      this.state = 'recording'
+    })
+
+    stop = vi.fn(() => {
+      this.state = 'inactive'
+      this.ondataavailable?.({
+        data: new Blob(['recorded-answer'], { type: 'audio/webm' }),
+      } as BlobEvent)
+      this.onstop?.()
+    })
+
+    static isTypeSupported(type: string) {
+      return type === 'audio/webm'
+    }
+  }
+
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia },
+  })
+  vi.stubGlobal('MediaRecorder', MockMediaRecorder)
+
+  return { getUserMedia, recorders, stream, trackStop }
+}
+
+function installObjectURLMock() {
+  const createObjectURL = vi.fn(() => 'blob:recorded-answer')
+  const revokeObjectURL = vi.fn()
+
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: createObjectURL,
+  })
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: revokeObjectURL,
+  })
+
+  return { createObjectURL, revokeObjectURL }
+}
+
 describe('App', () => {
   beforeEach(() => {
     mockPathname('/')
@@ -342,6 +412,251 @@ describe('App', () => {
     expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '朗讀題目' })).toBeDisabled()
     expect(screen.getByText('此瀏覽器不支援題目朗讀。')).toBeInTheDocument()
+  })
+
+  it('starts recording an answer for the current session question', async () => {
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true })
+    })
+    expect(media.recorders).toHaveLength(1)
+    expect(media.recorders[0].start).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '錄音中' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '停止錄音' })).toBeEnabled()
+  })
+
+  it('stops recording and shows an audio preview for the recorded answer', async () => {
+    const media = installMediaRecorderMock()
+    const objectURL = installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+
+    expect(media.recorders[0].stop).toHaveBeenCalledTimes(1)
+    expect(media.trackStop).toHaveBeenCalledTimes(1)
+    expect(objectURL.createObjectURL).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
+    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
+  })
+
+  it('shows an error when microphone permission is denied', async () => {
+    installObjectURLMock()
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(new Error('Permission denied')),
+      },
+    })
+    vi.stubGlobal('MediaRecorder', class MockMediaRecorder {})
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    expect(await screen.findByText('Permission denied')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
+  })
+
+  it('disables answer recording when MediaRecorder is unavailable', async () => {
+    installObjectURLMock()
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: undefined,
+    })
+    vi.stubGlobal('MediaRecorder', undefined)
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '開始錄音' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '停止錄音' })).toBeDisabled()
+    expect(screen.getByText('此瀏覽器不支援錄音。')).toBeInTheDocument()
+  })
+
+  it('stops active recording and clears preview when moving to another question', async () => {
+    const media = installMediaRecorderMock()
+    const objectURL = installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
+
+    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
+
+    expect(objectURL.revokeObjectURL).toHaveBeenCalledWith('blob:recorded-answer')
+    expect(screen.queryByLabelText('回答錄音預覽')).not.toBeInTheDocument()
+  })
+
+  it('stops media tracks when leaving the session page during recording', async () => {
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    const { unmount } = render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    unmount()
+
+    expect(media.trackStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('revokes the recorded preview URL when leaving the session page', async () => {
+    const media = installMediaRecorderMock()
+    const objectURL = installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [],
+      }),
+    )
+
+    const { unmount } = render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
+
+    unmount()
+
+    expect(objectURL.revokeObjectURL).toHaveBeenCalledWith('blob:recorded-answer')
   })
 
   it('moves between session questions with previous and next buttons', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview } from '../api/interviews'
 import type { InterviewDetail } from '../types/interview'
@@ -13,6 +13,14 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isPlayingQuestion, setIsPlayingQuestion] = useState(false)
+  const [isRecordingAnswer, setIsRecordingAnswer] = useState(false)
+  const [recordedAnswerURL, setRecordedAnswerURL] = useState<string | null>(null)
+  const [recordingError, setRecordingError] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const recordedAnswerURLRef = useRef<string | null>(null)
+  const shouldCreateRecordedPreviewRef = useRef(true)
 
   useEffect(() => {
     let isMounted = true
@@ -62,6 +70,11 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     'speechSynthesis' in window &&
     typeof SpeechSynthesisUtterance !== 'undefined'
 
+  const canRecordAnswer =
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== 'undefined'
+
   function playCurrentQuestion() {
     if (!currentQuestion || !canSpeakQuestion) {
       return
@@ -84,6 +97,113 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     }
     setIsPlayingQuestion(false)
   }
+
+  function revokeRecordedAnswerURL() {
+    if (recordedAnswerURLRef.current) {
+      URL.revokeObjectURL(recordedAnswerURLRef.current)
+      recordedAnswerURLRef.current = null
+    }
+    setRecordedAnswerURL(null)
+  }
+
+  function revokeRecordedAnswerURLOnUnmount() {
+    if (recordedAnswerURLRef.current) {
+      URL.revokeObjectURL(recordedAnswerURLRef.current)
+      recordedAnswerURLRef.current = null
+    }
+  }
+
+  function stopMediaStream() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+  }
+
+  async function startAnswerRecording() {
+    if (!canRecordAnswer || isRecordingAnswer) {
+      return
+    }
+
+    stopQuestionPlayback()
+    revokeRecordedAnswerURL()
+    setRecordingError(null)
+    recordedChunksRef.current = []
+    shouldCreateRecordedPreviewRef.current = true
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+
+      const recorderOptions =
+        typeof MediaRecorder.isTypeSupported === 'function' &&
+        MediaRecorder.isTypeSupported('audio/webm')
+          ? { mimeType: 'audio/webm' }
+          : undefined
+      const recorder = new MediaRecorder(stream, recorderOptions)
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data)
+        }
+      }
+      recorder.onstop = () => {
+        if (shouldCreateRecordedPreviewRef.current) {
+          const recordedBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
+          const recordedURL = URL.createObjectURL(recordedBlob)
+          recordedAnswerURLRef.current = recordedURL
+          setRecordedAnswerURL(recordedURL)
+        }
+        setIsRecordingAnswer(false)
+        stopMediaStream()
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecordingAnswer(true)
+    } catch (error) {
+      setIsRecordingAnswer(false)
+      stopMediaStream()
+      setRecordingError(error instanceof Error ? error.message : '無法開始錄音')
+    }
+  }
+
+  function stopAnswerRecording() {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') {
+      return
+    }
+
+    shouldCreateRecordedPreviewRef.current = true
+    recorder.stop()
+  }
+
+  function resetAnswerRecording() {
+    shouldCreateRecordedPreviewRef.current = false
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop()
+    } else {
+      stopMediaStream()
+    }
+
+    mediaRecorderRef.current = null
+    recordedChunksRef.current = []
+    setIsRecordingAnswer(false)
+    setRecordingError(null)
+    revokeRecordedAnswerURL()
+  }
+
+  useEffect(() => {
+    return () => {
+      shouldCreateRecordedPreviewRef.current = false
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop()
+      } else {
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+      }
+      revokeRecordedAnswerURLOnUnmount()
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -161,11 +281,45 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                   ) : null}
                 </div>
 
+                <div className="mt-5 rounded-md border border-slate-200 bg-white p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={startAnswerRecording}
+                      disabled={!canRecordAnswer || isRecordingAnswer}
+                      className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isRecordingAnswer ? '錄音中' : '開始錄音'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopAnswerRecording}
+                      disabled={!isRecordingAnswer}
+                      className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      停止錄音
+                    </button>
+                  </div>
+                  {!canRecordAnswer ? (
+                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援錄音。</p>
+                  ) : null}
+                  {recordingError ? (
+                    <p className="mt-3 text-sm text-red-700">{recordingError}</p>
+                  ) : null}
+                  {recordedAnswerURL ? (
+                    <div className="mt-4">
+                      <p className="mb-2 text-sm font-medium text-slate-700">回答錄音預覽</p>
+                      <audio aria-label="回答錄音預覽" controls src={recordedAnswerURL} />
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
                   <button
                     type="button"
                     onClick={() => {
                       stopQuestionPlayback()
+                      resetAnswerRecording()
                       setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
                     }}
                     disabled={isFirstQuestion}
@@ -177,6 +331,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                     type="button"
                     onClick={() => {
                       stopQuestionPlayback()
+                      resetAnswerRecording()
                       setCurrentQuestionIndex((index) => Math.min(index + 1, questions.length - 1))
                     }}
                     disabled={isLastQuestion}

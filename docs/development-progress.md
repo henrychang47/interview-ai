@@ -4,9 +4,9 @@
 
 ## Current Status
 
-- Current step: Step 8 - TTS 朗讀題目
+- Current step: Step 9 - 前端錄音
 - Status: Completed
-- Last updated: 2026-05-26
+- Last updated: 2026-05-27
 
 ## Step Progress
 
@@ -20,7 +20,7 @@
 | 6 | LLM 產生問題 | Completed | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
 | 7 | 模擬面試頁 | Completed | 使用者可逐題瀏覽面試問題 |
 | 8 | TTS 朗讀題目 | Completed | 瀏覽器可朗讀目前題目 |
-| 9 | 前端錄音 | Not started | 使用者可錄音並回放 |
+| 9 | 前端錄音 | Completed | 使用者可錄音並回放 |
 | 10 | 回答音檔上傳 API | Not started | 後端可保存音檔並建立 answer |
 | 11 | 完成整場面試流程 | Not started | 每題都有 answer，interview status 變成 completed |
 | 12 | 面試結果頁 | Not started | 可查看題目與回答音檔 |
@@ -186,12 +186,33 @@ Verification:
 - `go test ./...` passed in `backend`.
 - Manual browser verification confirmed pressing `朗讀題目` starts playback for the current question, moving to `下一題` stops prior playback, and pressing `朗讀題目` again starts playback for the new current question.
 
+### Step 9 - 前端錄音
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added browser MediaRecorder controls to the session page.
+- Requested microphone permission with `navigator.mediaDevices.getUserMedia`.
+- Supported start recording and stop recording for the current question.
+- Created a local answer audio preview after recording stops.
+- Stopped microphone tracks and cleared local previews when moving between questions or leaving the session page.
+- Disabled recording with a clear message when the browser does not support MediaRecorder.
+- Displayed microphone permission errors.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Browser verification confirmed the session page renders recording controls and surfaces local recording device errors.
+- Automated MediaRecorder tests confirmed users can record an answer and play it back locally.
+
 ## Next Step
 
-Step 9 - 前端錄音.
+Step 10 - 回答音檔上傳 API.
 
 Expected work:
 
-- Use browser `MediaRecorder`.
-- Support start recording, stop recording, and answer playback.
-- Handle microphone permission errors.
+- Implement multipart answer upload API.
+- Save uploaded audio to local storage.
+- Create or update answer records in the database.

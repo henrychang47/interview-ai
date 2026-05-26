@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 8 - TTS 朗讀題目
+- Current step: Step 9 - 前端錄音
 - Status: Completed
 - Last updated: 2026-05-27
 
@@ -20,7 +20,7 @@
 | 6 | LLM 產生問題 | Completed |
 | 7 | 模擬面試頁 | Completed |
 | 8 | TTS 朗讀題目 | Completed |
-| 9 | 前端錄音 | Not started |
+| 9 | 前端錄音 | Completed |
 | 10 | 回答音檔上傳 API | Not started |
 | 11 | 完成整場面試流程 | Not started |
 | 12 | 面試結果頁 | Not started |
@@ -134,6 +134,27 @@ Verification:
 - `go test ./...` passed in `backend`.
 - Manual browser verification confirmed pressing `朗讀題目` starts playback for the current question, moving to `下一題` stops prior playback, and pressing `朗讀題目` again starts playback for the new current question.
 
+## Step 9 Completion
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added browser MediaRecorder controls to the session page.
+- Requested microphone permission with `navigator.mediaDevices.getUserMedia`.
+- Supported start recording and stop recording for the current question.
+- Created a local answer audio preview after recording stops.
+- Stopped microphone tracks and cleared local previews when moving between questions or leaving the session page.
+- Disabled recording with a clear message when the browser does not support MediaRecorder.
+- Displayed microphone permission errors.
+
+Verification:
+
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Browser verification confirmed the session page renders recording controls and surfaces local recording device errors.
+- Automated MediaRecorder tests confirmed users can record an answer and play it back locally.
+
 ## Next Step
 
-Step 9 - 前端錄音.
+Step 10 - 回答音檔上傳 API.
