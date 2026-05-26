@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 2 - DB schema 與 migration
+- Current step: Step 3 - 建立面試 API
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -14,7 +14,7 @@
 |---:|---|---|---|
 | 1 | 專案骨架 | Completed | Docker Compose 可啟動，health check 正常，前端首頁可見 |
 | 2 | DB schema 與 migration | Completed | PostgreSQL 可看到 interviews、questions、answers 三張表 |
-| 3 | 建立面試 API | Not started | 可建立 interview 與 mock questions |
+| 3 | 建立面試 API | Completed | 可建立 interview 與 mock questions |
 | 4 | 查詢面試 API | Not started | 可查詢 interview、questions、answers |
 | 5 | 前端建立面試表單 | Not started | 使用者可從 UI 建立面試 |
 | 6 | LLM 產生問題 | Not started | 問題可根據輸入動態產生，無 API key 時有 mock/fallback |
@@ -79,12 +79,28 @@ Verification:
 - PostgreSQL listed `interviews`, `questions`, `answers`, and `schema_migrations`.
 - PostgreSQL schema inspection confirmed UUID primary keys, cascade foreign keys, and unique constraints.
 
+### Step 3 - 建立面試 API
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added `POST /api/interviews`.
+- Added mock question generation.
+- Persisted interviews and questions to PostgreSQL in one transaction.
+- Added validation errors for required fields and `question_count` range.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `POST /api/interviews` returned an interview id with `questions_ready`.
+- PostgreSQL contained the created interview row and 3 generated question rows.
+
 ## Next Step
 
-Step 3 - 建立面試 API，先使用假問題.
+Step 4 - 查詢面試 API.
 
 Expected work:
 
-- Implement `POST /api/interviews`.
-- Use `MockQuestionGenerator` to generate questions.
-- Persist interview and questions to PostgreSQL.
+- Implement `GET /api/interviews/{id}`.
+- Return interview details with questions and answers.

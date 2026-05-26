@@ -1,26 +1,54 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 
+	"interview-ai/backend/internal/config"
+	"interview-ai/backend/internal/handler"
+	"interview-ai/backend/internal/llm"
+	"interview-ai/backend/internal/repository"
+	"interview-ai/backend/internal/service"
+
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	interviewRepository := repository.NewInterviewRepository(pool)
+	questionGenerator := llm.MockQuestionGenerator{}
+	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
+	interviewHandler := handler.NewInterviewHandler(interviewService)
+
 	log.Println("starting interview-ai backend on :8080")
-	if err := http.ListenAndServe(":8080", newRouter()); err != nil {
+	if err := http.ListenAndServe(":8080", newRouter(interviewHandler)); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }
 
-func newRouter() http.Handler {
+func newRouter(interviewHandler http.Handler) http.Handler {
 	router := chi.NewRouter()
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	if interviewHandler != nil {
+		router.Mount("/api/interviews", interviewHandler)
+	}
 
 	return router
 }

@@ -56,6 +56,35 @@ curl http://localhost:8080/health
 {"status":"ok"}
 ```
 
+Create Interview API:
+
+```powershell
+$body = @{
+  job_title = '後端工程師'
+  job_description = '需要熟悉 Go、PostgreSQL、REST API'
+  user_profile = '有 Java 和 Go 學習經驗，正在準備後端工程師面試'
+  question_count = 3
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod -Uri http://localhost:8080/api/interviews `
+  -Method Post `
+  -ContentType 'application/json' `
+  -Body $body
+```
+
+預期回應：
+
+```json
+{"id":"<interview_uuid>","status":"questions_ready"}
+```
+
+確認資料庫最新建立的 interview 與 questions：
+
+```powershell
+docker compose exec postgres psql -U interview_ai -d interview_ai -c "SELECT id, status, question_count FROM interviews ORDER BY created_at DESC LIMIT 1;"
+docker compose exec postgres psql -U interview_ai -d interview_ai -c "SELECT question_order, question_text FROM questions WHERE interview_id = (SELECT id FROM interviews ORDER BY created_at DESC LIMIT 1) ORDER BY question_order;"
+```
+
 前端首頁：
 
 ```text
