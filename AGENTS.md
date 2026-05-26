@@ -4,15 +4,6 @@
 
 This repository contains an MVP for an interview practice application.
 
-The user can:
-1. Enter job information.
-2. Generate interview questions.
-3. Start a mock interview session.
-4. Listen to each question using browser TTS.
-5. Record answers using browser MediaRecorder.
-6. Upload answer audio files.
-7. Review interview results.
-
 The main MVP specification is located at:
 
 - `docs/mvp-spec.md`
@@ -35,3 +26,39 @@ Follow these rules strictly:
 8. Never commit real secrets or API keys.
 9. Use mock mode when external AI API keys are not configured.
 10. Do not add non-MVP features unless explicitly requested.
+
+## Documentation Update Rules
+
+The agent may update these files during normal development:
+
+- `README.md`
+- `docs/DEVELOPMENT_PLAN.md`
+- `docs/API.md`
+- `.env.example`
+
+The agent must update `docs/DEVELOPMENT_PLAN.md` after completing each step.
+
+The agent must update `docs/API.md` after implementing or changing an API endpoint.
+
+The agent must update `.env.example` whenever a new environment variable is introduced.
+
+The agent must update `README.md` whenever setup, startup, migration, or verification commands change.
+
+---
+
+## Spec Change Rules
+
+`docs/mvp-spec.md` is the source of truth for MVP scope and system design.
+
+Do not modify `docs/mvp-spec.md` directly unless explicitly instructed.
+
+If implementation reveals that the spec should change, first provide a spec change proposal containing:
+
+1. Current spec behavior.
+2. Problem discovered during implementation.
+3. Proposed change.
+4. Reason for the change.
+5. Impact on database, API, frontend, or development plan.
+6. Whether this changes MVP scope.
+
+Only modify `docs/mvp-spec.md` after the change is approved.
