@@ -12,6 +12,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isPlayingQuestion, setIsPlayingQuestion] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -55,6 +56,46 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     }
     return ((currentQuestionIndex + 1) / questions.length) * 100
   }, [currentQuestionIndex, questions.length])
+
+  const canSpeakQuestion =
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window &&
+    typeof SpeechSynthesisUtterance !== 'undefined'
+
+  function playCurrentQuestion() {
+    if (!currentQuestion || !canSpeakQuestion) {
+      return
+    }
+
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(currentQuestion.text)
+    utterance.lang = 'zh-TW'
+    utterance.onend = () => setIsPlayingQuestion(false)
+    utterance.onerror = () => setIsPlayingQuestion(false)
+
+    setIsPlayingQuestion(true)
+    window.speechSynthesis.speak(utterance)
+  }
+
+  function stopQuestionPlayback() {
+    if (canSpeakQuestion) {
+      window.speechSynthesis.cancel()
+    }
+    setIsPlayingQuestion(false)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (
+        typeof window !== 'undefined' &&
+        'speechSynthesis' in window &&
+        typeof SpeechSynthesisUtterance !== 'undefined'
+      ) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -106,10 +147,27 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                   </p>
                 </article>
 
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={playCurrentQuestion}
+                    disabled={!canSpeakQuestion || isPlayingQuestion}
+                    className="min-h-11 rounded-md border border-teal-700 bg-white px-5 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isPlayingQuestion ? '朗讀中' : '朗讀題目'}
+                  </button>
+                  {!canSpeakQuestion ? (
+                    <p className="mt-2 text-sm text-slate-600">此瀏覽器不支援題目朗讀。</p>
+                  ) : null}
+                </div>
+
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
                   <button
                     type="button"
-                    onClick={() => setCurrentQuestionIndex((index) => Math.max(index - 1, 0))}
+                    onClick={() => {
+                      stopQuestionPlayback()
+                      setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
+                    }}
                     disabled={isFirstQuestion}
                     className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -117,9 +175,10 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      stopQuestionPlayback()
                       setCurrentQuestionIndex((index) => Math.min(index + 1, questions.length - 1))
-                    }
+                    }}
                     disabled={isLastQuestion}
                     className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
