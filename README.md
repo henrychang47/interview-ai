@@ -16,6 +16,32 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
+## Database Migrations
+
+Start PostgreSQL:
+
+```powershell
+docker compose up -d postgres
+```
+
+Run migrations:
+
+```powershell
+docker compose run --rm migrate
+```
+
+Verify tables:
+
+```powershell
+docker compose exec postgres psql -U interview_ai -d interview_ai -c "\dt"
+```
+
+Expected tables:
+
+- `interviews`
+- `questions`
+- `answers`
+
 ## Verification
 
 後端健康檢查：

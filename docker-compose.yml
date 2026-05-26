@@ -15,6 +15,22 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    image: migrate/migrate:v4.17.1
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      [
+        "-path",
+        "/migrations",
+        "-database",
+        "${DATABASE_URL:-postgres://interview_ai:interview_ai_dev_password@postgres:5432/interview_ai?sslmode=disable}",
+        "up"
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: ./backend

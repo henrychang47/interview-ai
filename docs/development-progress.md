@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 1 - 建立專案骨架
+- Current step: Step 2 - DB schema 與 migration
 - Status: Completed
 - Last updated: 2026-05-26
 
@@ -13,7 +13,7 @@
 | Step | 功能 | 狀態 | 驗收重點 |
 |---:|---|---|---|
 | 1 | 專案骨架 | Completed | Docker Compose 可啟動，health check 正常，前端首頁可見 |
-| 2 | DB schema 與 migration | Not started | PostgreSQL 可看到 interviews、questions、answers 三張表 |
+| 2 | DB schema 與 migration | Completed | PostgreSQL 可看到 interviews、questions、answers 三張表 |
 | 3 | 建立面試 API | Not started | 可建立 interview 與 mock questions |
 | 4 | 查詢面試 API | Not started | 可查詢 interview、questions、answers |
 | 5 | 前端建立面試表單 | Not started | 使用者可從 UI 建立面試 |
@@ -62,12 +62,29 @@ Notes:
 - npm reported 5 moderate audit findings in installed dependencies; they did not block Step 1 verification.
 - `.env` is local-only and ignored by git.
 
+### Step 2 - DB schema 與 migration
+
+Completed on 2026-05-26.
+
+Implemented:
+
+- Added SQL migrations for `interviews`, `questions`, and `answers`.
+- Added Docker Compose migration service.
+- Documented migration execution and verification commands.
+
+Verification:
+
+- `docker compose config` passed.
+- `docker compose run --rm migrate` applied migration version 1.
+- PostgreSQL listed `interviews`, `questions`, `answers`, and `schema_migrations`.
+- PostgreSQL schema inspection confirmed UUID primary keys, cascade foreign keys, and unique constraints.
+
 ## Next Step
 
-Step 2 - 建立資料庫 schema 與 migration.
+Step 3 - 建立面試 API，先使用假問題.
 
 Expected work:
 
-- Add migrations for `interviews`, `questions`, and `answers`.
-- Decide and document the migration execution method.
-- Verify PostgreSQL contains the three MVP tables after migration.
+- Implement `POST /api/interviews`.
+- Use `MockQuestionGenerator` to generate questions.
+- Persist interview and questions to PostgreSQL.
