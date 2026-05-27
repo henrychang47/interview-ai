@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"interview-ai/backend/internal/model"
@@ -43,7 +43,7 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 				errors.Is(err, service.ErrQuestionCountRange):
 				writeError(w, http.StatusBadRequest, err.Error())
 			default:
-				log.Printf("create interview: %v", err)
+				slog.Error("create interview", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to create interview")
 			}
 			return
@@ -62,7 +62,7 @@ func getInterview(interviewService InterviewService) http.HandlerFunc {
 			case errors.Is(err, service.ErrInterviewNotFound):
 				writeError(w, http.StatusNotFound, err.Error())
 			default:
-				log.Printf("get interview: %v", err)
+				slog.Error("get interview", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to get interview")
 			}
 			return
@@ -76,7 +76,7 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("write json response: %v", err)
+		slog.Error("write json response", "error", err)
 	}
 }
 

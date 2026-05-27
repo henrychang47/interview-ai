@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
 	"interview-ai/backend/internal/config"
 	"interview-ai/backend/internal/handler"
@@ -18,14 +20,19 @@ import (
 )
 
 func main() {
+	configureLogger("info")
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		slog.Error("load config", "error", err)
+		os.Exit(1)
 	}
+	configureLogger(cfg.LogLevel)
 
 	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("connect database: %v", err)
+		slog.Error("connect database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
@@ -37,19 +44,20 @@ func main() {
 	answerService := service.NewAnswerService(audioStorage, answerRepository)
 	interviewHandler := handler.NewInterviewHandler(interviewService, answerService)
 
-	log.Println("starting interview-ai backend on :8080")
+	slog.Info("starting interview-ai backend", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", newRouter(interviewHandler)); err != nil {
-		log.Fatalf("server stopped: %v", err)
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }
 
 func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
 	if cfg.GeminiAPIKey == "" {
-		log.Println("GEMINI_API_KEY is not configured; using mock question generator")
+		slog.Info("using mock question generator", "reason", "GEMINI_API_KEY not configured")
 		return llm.MockQuestionGenerator{}
 	}
 
-	log.Printf("GEMINI_API_KEY is configured; using Gemini question generator with model %s and fallback model %s", cfg.GeminiModel, cfg.GeminiFallbackModel)
+	slog.Info("using Gemini question generator", "model", cfg.GeminiModel, "fallback_model", cfg.GeminiFallbackModel)
 	return llm.NewGeminiQuestionGenerator(llm.GeminiQuestionGeneratorConfig{
 		APIKey:        cfg.GeminiAPIKey,
 		Model:         cfg.GeminiModel,
@@ -57,8 +65,27 @@ func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
 	})
 }
 
+func configureLogger(level string) {
+	levelVar := new(slog.LevelVar)
+	switch level {
+	case "debug":
+		levelVar.Set(slog.LevelDebug)
+	case "warn":
+		levelVar.Set(slog.LevelWarn)
+	case "error":
+		levelVar.Set(slog.LevelError)
+	default:
+		levelVar.Set(slog.LevelInfo)
+	}
+
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: levelVar,
+	})))
+}
+
 func newRouter(interviewHandler http.Handler) http.Handler {
 	router := chi.NewRouter()
+	router.Use(requestLoggingMiddleware)
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -71,11 +98,40 @@ func newRouter(interviewHandler http.Handler) http.Handler {
 	return router
 }
 
+func requestLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusResponseWriter{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+		start := time.Now()
+
+		next.ServeHTTP(recorder, r)
+
+		slog.Info("http request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", recorder.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+type statusResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("write json response: %v", err)
+		slog.Error("write json response", "error", err)
 	}
 }

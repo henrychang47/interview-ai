@@ -193,6 +193,21 @@ Verification:
 - `npm run build --prefix frontend` passed.
 - Manual Docker Compose verification confirmed answer rows, uploaded files, and completed interview status.
 
+## Backend Logger Maintenance
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added `LOG_LEVEL` with `debug`, `info`, `warn`, and `error` support.
+- Switched backend startup and handler error logs to structured `log/slog` logging.
+- Added request logging middleware for method, path, status, and duration.
+- Updated `.env.example` with the default `LOG_LEVEL=info`.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+
 ## Next Step
 
 Step 12 - 建立面試結果頁.

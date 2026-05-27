@@ -3,7 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"interview-ai/backend/internal/model"
@@ -55,10 +55,10 @@ func uploadAnswer(answerService AnswerService) http.HandlerFunc {
 				errors.Is(err, service.ErrQuestionNotFoundForInterview):
 				writeError(w, http.StatusNotFound, err.Error())
 			case errors.Is(err, service.ErrSaveAnswerAudioFailed):
-				log.Printf("save answer audio: %v", err)
+				slog.Error("save answer audio", "error", err)
 				writeError(w, http.StatusInternalServerError, service.ErrSaveAnswerAudioFailed.Error())
 			default:
-				log.Printf("upload answer: %v", err)
+				slog.Error("upload answer", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to save answer")
 			}
 			return

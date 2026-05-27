@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	DatabaseURL         string
+	LogLevel            string
 	GeminiAPIKey        string
 	GeminiModel         string
 	GeminiFallbackModel string
@@ -25,6 +26,10 @@ func Load() (Config, error) {
 	postgresUser := os.Getenv("POSTGRES_USER")
 	postgresPassword := os.Getenv("POSTGRES_PASSWORD")
 	postgresDB := os.Getenv("POSTGRES_DB")
+	logLevel := strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL")))
+	if logLevel == "" {
+		logLevel = "info"
+	}
 	geminiAPIKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
 	geminiModel := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if geminiModel == "" {
@@ -50,6 +55,9 @@ func Load() (Config, error) {
 	if postgresDB == "" {
 		return Config{}, errors.New("POSTGRES_DB is required")
 	}
+	if !isSupportedLogLevel(logLevel) {
+		return Config{}, fmt.Errorf("LOG_LEVEL must be one of debug, info, warn, error")
+	}
 
 	databaseURL := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -62,8 +70,18 @@ func Load() (Config, error) {
 
 	return Config{
 		DatabaseURL:         databaseURL,
+		LogLevel:            logLevel,
 		GeminiAPIKey:        geminiAPIKey,
 		GeminiModel:         geminiModel,
 		GeminiFallbackModel: geminiFallbackModel,
 	}, nil
+}
+
+func isSupportedLogLevel(level string) bool {
+	switch level {
+	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
 }

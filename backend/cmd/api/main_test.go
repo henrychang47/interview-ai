@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"interview-ai/backend/internal/config"
@@ -27,6 +30,36 @@ func TestHealthReturnsOK(t *testing.T) {
 
 	if body["status"] != "ok" {
 		t.Fatalf("expected status ok, got %q", body["status"])
+	}
+}
+
+func TestRouterLogsHealthRequest(t *testing.T) {
+	var logs bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(originalLogger)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	response := httptest.NewRecorder()
+
+	newRouter(nil).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+
+	logOutput := logs.String()
+	for _, expected := range []string{
+		`"method":"GET"`,
+		`"path":"/health"`,
+		`"status":200`,
+		`"duration_ms":`,
+	} {
+		if !strings.Contains(logOutput, expected) {
+			t.Fatalf("expected request log to contain %s, got %s", expected, logOutput)
+		}
 	}
 }
 
