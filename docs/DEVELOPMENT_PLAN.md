@@ -4,9 +4,9 @@
 
 ## Current Status
 
-- Current step: Step 12 - 建立面試結果頁
+- Current step: Immersive interview flow
 - Status: Completed
-- Last updated: 2026-05-27
+- Last updated: 2026-05-28
 
 ## Progress
 
@@ -225,6 +225,26 @@ Implemented:
 Verification:
 
 - `go test ./...` passed in `backend`.
+
+## Immersive Interview Flow Completion
+
+Completed on 2026-05-28.
+
+Implemented:
+
+- Added two-stage interview setup with microphone test.
+- Added question language selection for `zh-TW` and `en-US`.
+- Added asynchronous question generation with `generating_questions` status.
+- Added preparation page polling and hidden pre-start questions.
+- Added start-interview API and `in_progress` transition.
+- Replaced manual session controls with automatic question playback, recording, answer-end control, replay-question behavior, and in-memory background upload queue.
+- Added configurable `VITE_MAX_ANSWER_RECORDING_SECONDS`, defaulting to 180 seconds.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `npm test` passed in `frontend`.
+- `npm run build` passed in `frontend`.
 
 ## Next Step
 

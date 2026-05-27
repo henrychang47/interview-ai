@@ -129,6 +129,7 @@ describe('App', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
+    vi.useRealTimers()
     window.history.pushState({}, '', '/')
   })
 
@@ -152,12 +153,14 @@ describe('App', () => {
     expect(screen.getByLabelText('職位名稱')).toBeInTheDocument()
     expect(screen.getByLabelText('職位要求及說明')).toBeInTheDocument()
     expect(screen.getByLabelText('個人資訊')).toBeInTheDocument()
-    expect(screen.getByLabelText('題目數量')).toHaveValue(3)
+    expect(screen.queryByLabelText('題目數量')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一步' })).toBeEnabled()
   })
 
-  it('submits the create interview form and navigates to detail route', async () => {
+  it('submits the two-stage create interview form after microphone test', async () => {
+    const media = installMediaRecorderMock()
     mockPathname('/interviews/new')
-    const fetchMock = mockFetchOnce({ id: 'interview-123', status: 'questions_ready' })
+    const fetchMock = mockFetchOnce({ id: 'interview-123', status: 'generating_questions' })
     vi.stubGlobal('fetch', fetchMock)
     const pushState = vi.spyOn(window.history, 'pushState')
 
@@ -170,7 +173,17 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('個人資訊'), {
       target: { value: '有 Java 和 Go 學習經驗' },
     })
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(await screen.findByLabelText('題目數量')).toHaveValue(3)
     fireEvent.change(screen.getByLabelText('題目數量'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'English' }))
+    expect(screen.getByRole('button', { name: '建立面試' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '測試麥克風' }))
+    await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
+    expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
 
     await waitFor(() => {
@@ -184,6 +197,7 @@ describe('App', () => {
           job_description: '需要熟悉 Go、PostgreSQL、REST API',
           user_profile: '有 Java 和 Go 學習經驗',
           question_count: 3,
+          question_language: 'en-US',
         }),
       })
     })
@@ -191,17 +205,99 @@ describe('App', () => {
   })
 
   it('shows an API error when create interview fails', async () => {
+    installMediaRecorderMock()
     mockPathname('/interviews/new')
     vi.stubGlobal('fetch', mockFetchOnce({ error: 'job_title is required' }, { status: 400 }))
 
     render(<App />)
 
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(await screen.findByRole('button', { name: '測試麥克風' }))
+    expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
 
     expect(await screen.findByText('job_title is required')).toBeInTheDocument()
   })
 
-  it('loads interview details and displays questions at /interviews/:id', async () => {
+  it('shows question preparation while questions are generating', async () => {
+    vi.useFakeTimers()
+    mockPathname('/interviews/interview-123')
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'interview-123',
+          job_title: '後端工程師',
+          job_description: '需要熟悉 Go、PostgreSQL、REST API',
+          user_profile: '有 Java 和 Go 學習經驗',
+          question_count: 2,
+          question_language: 'zh-TW',
+          status: 'generating_questions',
+          questions: [],
+          answers: [],
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByText('題目準備中')).toBeInTheDocument()
+    expect(screen.queryByText('問題 1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '開始模擬面試' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+    await act(async () => {})
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('starts a ready interview from the preparation page', async () => {
+    mockPathname('/interviews/interview-123')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 2,
+            question_language: 'zh-TW',
+            status: 'questions_ready',
+            questions: [],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'interview-123', status: 'in_progress' }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const pushState = vi.spyOn(window.history, 'pushState')
+
+    render(<App />)
+
+    expect(await screen.findByText('題目已準備完成')).toBeInTheDocument()
+    expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始模擬面試' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith('/api/interviews/interview-123/start', {
+        method: 'POST',
+      }),
+    )
+    expect(pushState).toHaveBeenCalledWith({}, '', '/interviews/interview-123/session')
+  })
+
+  it('loads interview details and displays in-progress questions at /interviews/:id', async () => {
     mockPathname('/interviews/interview-123')
     vi.stubGlobal(
       'fetch',
@@ -211,7 +307,8 @@ describe('App', () => {
         job_description: '需要熟悉 Go、PostgreSQL、REST API',
         user_profile: '有 Java 和 Go 學習經驗',
         question_count: 2,
-        status: 'questions_ready',
+        question_language: 'zh-TW',
+        status: 'in_progress',
         questions: [
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
           { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
@@ -223,16 +320,19 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: '後端工程師' })).toBeInTheDocument()
-    expect(screen.getByText('questions_ready')).toBeInTheDocument()
-    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '開始模擬面試' })).toHaveAttribute(
+    expect(screen.getByText('in_progress')).toBeInTheDocument()
+    expect(screen.getByText('面試進行中')).toBeInTheDocument()
+    expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '繼續面試' })).toHaveAttribute(
       'href',
       '/interviews/interview-123/session',
     )
   })
 
-  it('loads the interview session page at /interviews/:id/session', async () => {
+  it('automatically plays the first question and starts recording after playback ends', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
     mockPathname('/interviews/interview-123/session')
     vi.stubGlobal(
       'fetch',
@@ -241,22 +341,112 @@ describe('App', () => {
         job_title: '後端工程師',
         job_description: '需要熟悉 Go、PostgreSQL、REST API',
         user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 2,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
-        ],
+        question_count: 1,
+        question_language: 'zh-TW',
+        status: 'in_progress',
+        questions: [{ id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' }],
         answers: [],
       }),
     )
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: '模擬面試進行中' })).toBeInTheDocument()
-    expect(screen.getByText('後端工程師')).toBeInTheDocument()
-    expect(screen.getByText('第 1 題 / 共 2 題')).toBeInTheDocument()
-    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
+    expect(speech.speak).toHaveBeenCalledTimes(1)
+    expect(speech.utterances[0].lang).toBe('zh-TW')
+
+    act(() => speech.utterances[0].onend?.())
+
+    await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
+    expect(screen.getByText('正在錄音')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '回答結束' })).toBeEnabled()
+  })
+
+  it('replays the question during recording and discards the current recording', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 經驗',
+        question_count: 1,
+        question_language: 'zh-TW',
+        status: 'in_progress',
+        questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    act(() => speech.utterances[0].onend?.())
+    await waitFor(() => expect(media.recorders).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: '重新播放題目' }))
+
+    expect(media.recorders[0].stop).toHaveBeenCalledTimes(1)
+    expect(screen.queryByLabelText('回答錄音預覽')).not.toBeInTheDocument()
+    expect(speech.speak).toHaveBeenCalledTimes(2)
+  })
+
+  it('queues uploads in the background and waits before opening the result page', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'answer-1',
+            interview_id: 'interview-123',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    act(() => speech.utterances[0].onend?.())
+    await waitFor(() => expect(media.recorders).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: '回答結束' }))
+
+    expect(await screen.findByText('正在完成面試')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/interviews/interview-123/questions/question-1/answer',
+        expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+      ),
+    )
+    await waitFor(() => expect(window.location.pathname).toBe('/interviews/interview-123/result'))
   })
 
   it('loads the completed interview result page with playable answers', async () => {
@@ -344,743 +534,6 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByText('interview not found')).toBeInTheDocument()
-  })
-
-  it('speaks the current session question when the play button is clicked', async () => {
-    const speech = installSpeechSynthesisMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 2,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
-        ],
-        answers: [],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
-
-    expect(speech.cancel).toHaveBeenCalledTimes(1)
-    expect(speech.speak).toHaveBeenCalledTimes(1)
-    expect(speech.utterances[0].text).toBe('請介紹你過去與後端開發相關的經驗。')
-    expect(speech.utterances[0].lang).toBe('zh-TW')
-    expect(screen.getByRole('button', { name: '朗讀中' })).toBeDisabled()
-
-    act(() => {
-      speech.utterances[0].onend?.()
-    })
-
-    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeEnabled()
-  })
-
-  it('cancels existing speech before speaking the question again', async () => {
-    const speech = installSpeechSynthesisMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
-    act(() => {
-      speech.utterances[0].onend?.()
-    })
-    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
-
-    expect(speech.cancel).toHaveBeenCalledTimes(2)
-    expect(speech.speak).toHaveBeenCalledTimes(2)
-  })
-
-  it('stops speech when moving to another question', async () => {
-    const speech = installSpeechSynthesisMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 2,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
-
-    expect(speech.cancel).toHaveBeenCalledTimes(2)
-    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeEnabled()
-  })
-
-  it('stops speech when leaving the session page', async () => {
-    const speech = installSpeechSynthesisMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    const { unmount } = render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '朗讀題目' }))
-    unmount()
-
-    expect(speech.cancel).toHaveBeenCalledTimes(2)
-  })
-
-  it('disables question playback when speech synthesis is unavailable', async () => {
-    vi.stubGlobal('speechSynthesis', undefined)
-    vi.stubGlobal('SpeechSynthesisUtterance', undefined)
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '朗讀題目' })).toBeDisabled()
-    expect(screen.getByText('此瀏覽器不支援題目朗讀。')).toBeInTheDocument()
-  })
-
-  it('starts recording an answer for the current session question', async () => {
-    const media = installMediaRecorderMock()
-    installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true })
-    })
-    expect(media.recorders).toHaveLength(1)
-    expect(media.recorders[0].start).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: '錄音中' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '停止錄音' })).toBeEnabled()
-  })
-
-  it('stops recording and shows an audio preview for the recorded answer', async () => {
-    const media = installMediaRecorderMock()
-    const objectURL = installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
-
-    expect(media.recorders[0].stop).toHaveBeenCalledTimes(1)
-    expect(media.trackStop).toHaveBeenCalledTimes(1)
-    expect(objectURL.createObjectURL).toHaveBeenCalledTimes(1)
-    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
-    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
-  })
-
-  it('shows an error when microphone permission is denied', async () => {
-    installObjectURLMock()
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: {
-        getUserMedia: vi.fn().mockRejectedValue(new Error('Permission denied')),
-      },
-    })
-    vi.stubGlobal('MediaRecorder', class MockMediaRecorder {})
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    expect(await screen.findByText('Permission denied')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
-  })
-
-  it('shows a helpful message when no microphone device is available', async () => {
-    installObjectURLMock()
-    const deviceError = new Error('Requested device not found')
-    deviceError.name = 'NotFoundError'
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: {
-        getUserMedia: vi.fn().mockRejectedValue(deviceError),
-      },
-    })
-    vi.stubGlobal('MediaRecorder', class MockMediaRecorder {})
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    expect(
-      await screen.findByText('找不到可用的麥克風，請確認裝置已連接，並在瀏覽器或系統設定中允許麥克風。'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Requested device not found')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '開始錄音' })).toBeEnabled()
-  })
-
-  it('disables answer recording when MediaRecorder is unavailable', async () => {
-    installObjectURLMock()
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: undefined,
-    })
-    vi.stubGlobal('MediaRecorder', undefined)
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '開始錄音' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '停止錄音' })).toBeDisabled()
-    expect(screen.getByText('此瀏覽器不支援錄音。')).toBeInTheDocument()
-  })
-
-  it('stops active recording and clears preview when moving to another question', async () => {
-    const media = installMediaRecorderMock()
-    const objectURL = installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 2,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
-    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
-
-    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
-
-    expect(objectURL.revokeObjectURL).toHaveBeenCalledWith('blob:recorded-answer')
-    expect(screen.queryByLabelText('回答錄音預覽')).not.toBeInTheDocument()
-  })
-
-  it('stops media tracks when leaving the session page during recording', async () => {
-    const media = installMediaRecorderMock()
-    installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    const { unmount } = render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    unmount()
-
-    expect(media.trackStop).toHaveBeenCalledTimes(1)
-  })
-
-  it('revokes the recorded preview URL when leaving the session page', async () => {
-    const media = installMediaRecorderMock()
-    const objectURL = installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [],
-      }),
-    )
-
-    const { unmount } = render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
-    expect(screen.getByLabelText('回答錄音預覽')).toHaveAttribute('src', 'blob:recorded-answer')
-
-    unmount()
-
-    expect(objectURL.revokeObjectURL).toHaveBeenCalledWith('blob:recorded-answer')
-  })
-
-  it('shows uploaded answer state when resuming an answered question', async () => {
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '完成面試' })).toBeEnabled()
-  })
-
-  it('uploads the recorded answer for the current question', async () => {
-    const media = installMediaRecorderMock()
-    installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'interview-123',
-            job_title: '後端工程師',
-            job_description: '需要熟悉 Go、PostgreSQL、REST API',
-            user_profile: '有 Java 和 Go 學習經驗',
-            question_count: 1,
-            status: 'questions_ready',
-            questions: [
-              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-            ],
-            answers: [],
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'answer-1',
-            interview_id: 'interview-123',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-          }),
-          { status: 201, headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'interview-123',
-            job_title: '後端工程師',
-            job_description: '需要熟悉 Go、PostgreSQL、REST API',
-            user_profile: '有 Java 和 Go 學習經驗',
-            question_count: 1,
-            status: 'completed',
-            questions: [
-              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-            ],
-            answers: [
-              {
-                id: 'answer-1',
-                question_id: 'question-1',
-                audio_path: 'storage/audio/interview-123/question-1.webm',
-                transcript_text: null,
-                created_at: '2026-05-27T06:30:04Z',
-              },
-            ],
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
-    fireEvent.click(await screen.findByRole('button', { name: '上傳本題回答' }))
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2)
-    })
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      '/api/interviews/interview-123/questions/question-1/answer',
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.any(FormData),
-      }),
-    )
-    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
-  })
-
-  it('finishes the session after uploading the final answer', async () => {
-    const media = installMediaRecorderMock()
-    installObjectURLMock()
-    mockPathname('/interviews/interview-123/session')
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'interview-123',
-            job_title: '後端工程師',
-            job_description: '需要熟悉 Go、PostgreSQL、REST API',
-            user_profile: '有 Java 和 Go 學習經驗',
-            question_count: 1,
-            status: 'questions_ready',
-            questions: [
-              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-            ],
-            answers: [],
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'answer-1',
-            interview_id: 'interview-123',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-          }),
-          { status: 201, headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: 'interview-123',
-            job_title: '後端工程師',
-            job_description: '需要熟悉 Go、PostgreSQL、REST API',
-            user_profile: '有 Java 和 Go 學習經驗',
-            question_count: 1,
-            status: 'completed',
-            questions: [
-              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-            ],
-            answers: [
-              {
-                id: 'answer-1',
-                question_id: 'question-1',
-                audio_path: 'storage/audio/interview-123/question-1.webm',
-                transcript_text: null,
-                created_at: '2026-05-27T06:30:04Z',
-              },
-            ],
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '完成面試' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
-
-    await waitFor(() => {
-      expect(media.recorders).toHaveLength(1)
-    })
-    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
-    fireEvent.click(await screen.findByRole('button', { name: '上傳本題回答' }))
-
-    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '完成面試' }))
-
-    expect(await screen.findByRole('heading', { name: '面試結果' })).toBeInTheDocument()
-    expect(screen.getByLabelText('問題 1 回答音檔')).toHaveAttribute(
-      'src',
-      '/audio/interview-123/question-1.webm',
-    )
-    expect(window.location.pathname).toBe('/interviews/interview-123/result')
-  })
-
-  it('moves between session questions with previous and next buttons', async () => {
-    mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 2,
-        status: 'questions_ready',
-        questions: [
-          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
-          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
-        ],
-        answers: [
-          {
-            id: 'answer-1',
-            question_id: 'question-1',
-            audio_path: 'storage/audio/interview-123/question-1.webm',
-            transcript_text: null,
-            created_at: '2026-05-27T06:30:04Z',
-          },
-        ],
-      }),
-    )
-
-    render(<App />)
-
-    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '上一題' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '下一題' })).toBeEnabled()
-
-    fireEvent.click(screen.getByRole('button', { name: '下一題' }))
-
-    expect(screen.getByText('第 2 題 / 共 2 題')).toBeInTheDocument()
-    expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '上一題' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '完成面試' })).toBeDisabled()
-
-    fireEvent.click(screen.getByRole('button', { name: '上一題' }))
-
-    expect(screen.getByText('第 1 題 / 共 2 題')).toBeInTheDocument()
-    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
   })
 
   it('shows an empty state when a session has no questions', async () => {

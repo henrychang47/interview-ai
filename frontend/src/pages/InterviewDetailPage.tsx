@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-import { getInterview } from '../api/interviews'
+import { getInterview, startInterview } from '../api/interviews'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewDetailPageProps = {
@@ -11,36 +11,57 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
 
-  useEffect(() => {
-    let isMounted = true
+  const loadInterview = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-    async function loadInterview() {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const detail = await getInterview(interviewID)
-        if (isMounted) {
-          setInterview(detail)
-        }
-      } catch (error) {
-        if (isMounted) {
-          setError(error instanceof Error ? error.message : '載入面試失敗')
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadInterview()
-
-    return () => {
-      isMounted = false
+    try {
+      const detail = await getInterview(interviewID)
+      setInterview(detail)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '載入面試失敗')
+    } finally {
+      setIsLoading(false)
     }
   }, [interviewID])
+
+  useEffect(() => {
+    loadInterview()
+  }, [loadInterview])
+
+  useEffect(() => {
+    if (interview?.status !== 'generating_questions') {
+      return
+    }
+
+    const intervalID = window.setInterval(() => {
+      loadInterview()
+    }, 2000)
+
+    return () => window.clearInterval(intervalID)
+  }, [interview?.status, loadInterview])
+
+  async function handleStartInterview() {
+    if (!interview) {
+      return
+    }
+
+    setIsStarting(true)
+    setError(null)
+
+    try {
+      await startInterview(interview.id)
+      const path = `/interviews/${interview.id}/session`
+      window.history.pushState({}, '', path)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '開始面試失敗')
+    } finally {
+      setIsStarting(false)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -72,31 +93,53 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
               </span>
             </div>
 
-            <section className="mt-8">
-              <h2 className="text-xl font-semibold text-slate-900">面試問題</h2>
-              <ol className="mt-4 space-y-3">
-                {interview.questions.map((question) => (
-                  <li
-                    key={question.id}
-                    className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-                  >
-                    <p className="text-sm font-semibold text-teal-700">問題 {question.order}</p>
-                    <p className="mt-2 text-slate-900">{question.text}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            <section className="mt-8 space-y-4">
+              {interview.status === 'generating_questions' ? (
+                <h2 className="text-xl font-semibold text-slate-900">題目準備中</h2>
+              ) : null}
 
-            {interview.questions.length > 0 ? (
-              <div className="mt-8">
-                <a
-                  href={`/interviews/${interview.id}/session`}
-                  className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-                >
-                  開始模擬面試
-                </a>
-              </div>
-            ) : null}
+              {interview.status === 'questions_ready' ? (
+                <>
+                  <h2 className="text-xl font-semibold text-slate-900">題目已準備完成</h2>
+                  <button
+                    type="button"
+                    onClick={handleStartInterview}
+                    disabled={isStarting}
+                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {isStarting ? '開始中...' : '開始模擬面試'}
+                  </button>
+                </>
+              ) : null}
+
+              {interview.status === 'failed' ? (
+                <p className="text-red-700">題目產生失敗，請建立另一場面試。</p>
+              ) : null}
+
+              {interview.status === 'in_progress' ? (
+                <>
+                  <h2 className="text-xl font-semibold text-slate-900">面試進行中</h2>
+                  <a
+                    href={`/interviews/${interview.id}/session`}
+                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+                  >
+                    繼續面試
+                  </a>
+                </>
+              ) : null}
+
+              {interview.status === 'completed' ? (
+                <>
+                  <h2 className="text-xl font-semibold text-slate-900">面試已完成</h2>
+                  <a
+                    href={`/interviews/${interview.id}/result`}
+                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+                  >
+                    查看結果
+                  </a>
+                </>
+              ) : null}
+            </section>
           </div>
         ) : null}
       </section>

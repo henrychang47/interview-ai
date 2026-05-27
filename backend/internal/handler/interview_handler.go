@@ -16,12 +16,14 @@ import (
 type InterviewService interface {
 	CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error)
 	GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error)
+	StartInterview(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error)
 }
 
 func NewInterviewHandler(interviewService InterviewService, answerService AnswerService) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/", createInterview(interviewService))
 	router.Get("/{interviewID}", getInterview(interviewService))
+	router.Post("/{interviewID}/start", startInterview(interviewService))
 	router.Post("/{interviewID}/questions/{questionID}/answer", uploadAnswer(answerService))
 	return router
 }
@@ -40,7 +42,8 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 			case errors.Is(err, service.ErrJobTitleRequired),
 				errors.Is(err, service.ErrJobDescriptionRequired),
 				errors.Is(err, service.ErrUserProfileRequired),
-				errors.Is(err, service.ErrQuestionCountRange):
+				errors.Is(err, service.ErrQuestionCountRange),
+				errors.Is(err, service.ErrQuestionLanguageUnsupported):
 				writeError(w, http.StatusBadRequest, err.Error())
 			default:
 				slog.Error("create interview", "error", err)
@@ -64,6 +67,25 @@ func getInterview(interviewService InterviewService) http.HandlerFunc {
 			default:
 				slog.Error("get interview", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to get interview")
+			}
+			return
+		}
+
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func startInterview(interviewService InterviewService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		interviewID := chi.URLParam(r, "interviewID")
+		response, err := interviewService.StartInterview(r.Context(), interviewID)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrInterviewNotReady):
+				writeError(w, http.StatusConflict, err.Error())
+			default:
+				slog.Error("start interview", "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to start interview")
 			}
 			return
 		}

@@ -47,6 +47,14 @@ export async function getInterview(interviewID: string): Promise<InterviewDetail
   return parseJSONResponse<InterviewDetail>(response, '載入面試失敗')
 }
 
+export async function startInterview(interviewID: string): Promise<CreateInterviewResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/interviews/${interviewID}/start`, {
+    method: 'POST',
+  })
+
+  return parseJSONResponse<CreateInterviewResponse>(response, '開始面試失敗')
+}
+
 export async function uploadAnswerAudio(
   interviewID: string,
   questionID: string,

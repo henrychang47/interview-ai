@@ -28,7 +28,8 @@ Request:
   "job_title": "後端工程師",
   "job_description": "需要熟悉 Go、PostgreSQL、REST API",
   "user_profile": "有 Java 和 Go 學習經驗，正在準備後端工程師面試",
-  "question_count": 3
+  "question_count": 3,
+  "question_language": "zh-TW"
 }
 ```
 
@@ -41,7 +42,7 @@ Success response:
 ```json
 {
   "id": "interview_uuid",
-  "status": "questions_ready"
+  "status": "generating_questions"
 }
 ```
 
@@ -67,6 +68,10 @@ Validation errors:
 {"error":"question_count must be between 1 and 10"}
 ```
 
+```json
+{"error":"question_language must be zh-TW or en-US"}
+```
+
 Server error:
 
 ```json
@@ -77,6 +82,8 @@ Question generation:
 
 - If `GEMINI_API_KEY` is empty, the backend uses mock interview questions.
 - If `GEMINI_API_KEY` is set, the backend calls Gemini to generate questions from `job_title`, `job_description`, and `user_profile`.
+- `question_language` must be `zh-TW` or `en-US`. Empty values default to `zh-TW`.
+- The create API returns immediately with `generating_questions`; question generation finishes in the background.
 - Gemini requests use `GEMINI_MODEL` first and fall back to `GEMINI_FALLBACK_MODEL` after retrying transient `429` or `503` failures.
 - The backend validates the LLM JSON response before saving questions.
 
@@ -95,17 +102,14 @@ Success response:
   "job_description": "需要熟悉 Go、PostgreSQL、REST API",
   "user_profile": "有 Java 和 Go 學習經驗，正在準備後端工程師面試",
   "question_count": 3,
+  "question_language": "zh-TW",
   "status": "questions_ready",
-  "questions": [
-    {
-      "id": "question_uuid_1",
-      "order": 1,
-      "text": "請介紹你過去與後端開發相關的經驗。"
-    }
-  ],
+  "questions": [],
   "answers": []
 }
 ```
+
+`questions` is intentionally empty until the interview status is `in_progress` or `completed`.
 
 Errors:
 
@@ -115,6 +119,31 @@ Errors:
 
 ```json
 {"error":"failed to get interview"}
+```
+
+## Start Interview
+
+```http
+POST /api/interviews/{interview_id}/start
+```
+
+Success response:
+
+```json
+{
+  "id": "interview_uuid",
+  "status": "in_progress"
+}
+```
+
+Errors:
+
+```json
+{"error":"interview is not ready to start"}
+```
+
+```json
+{"error":"failed to start interview"}
 ```
 
 ## Upload Answer Audio

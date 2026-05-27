@@ -10,10 +10,11 @@ type QuestionGenerator interface {
 }
 
 type GenerateQuestionsInput struct {
-	JobTitle       string
-	JobDescription string
-	UserProfile    string
-	QuestionCount  int
+	JobTitle         string
+	JobDescription   string
+	UserProfile      string
+	QuestionCount    int
+	QuestionLanguage string
 }
 
 type GeneratedQuestion struct {
@@ -35,6 +36,20 @@ func (MockQuestionGenerator) GenerateQuestions(ctx context.Context, input Genera
 		"請分享你與跨職能團隊合作的經驗。",
 		"你如何評估系統效能瓶頸？",
 		"請描述你學習新技術並應用到專案中的方式。",
+	}
+	if input.QuestionLanguage == "en-US" {
+		baseQuestions = []string{
+			"Please introduce your previous experience related to backend development.",
+			"How would you design a REST API?",
+			"What do you pay attention to when working with PostgreSQL?",
+			"Please share an experience debugging a backend service issue.",
+			"How do you keep APIs maintainable and testable?",
+			"How do you handle database transactions and error recovery?",
+			"How would you design a scalable service architecture?",
+			"Please share your experience working with cross-functional teams.",
+			"How do you evaluate system performance bottlenecks?",
+			"Describe how you learn and apply a new technology in a project.",
+		}
 	}
 
 	questions := make([]GeneratedQuestion, 0, input.QuestionCount)

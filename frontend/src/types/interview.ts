@@ -3,6 +3,7 @@ export type CreateInterviewRequest = {
   job_description: string
   user_profile: string
   question_count: number
+  question_language: string
 }
 
 export type CreateInterviewResponse = {
@@ -38,6 +39,7 @@ export type InterviewDetail = {
   job_description: string
   user_profile: string
   question_count: number
+  question_language: string
   status: string
   questions: Question[]
   answers: Answer[]

@@ -1,18 +1,30 @@
 package model
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrInterviewNotReady = errors.New("interview is not ready to start")
 
 const (
-	InterviewStatusCreated        = "created"
-	InterviewStatusQuestionsReady = "questions_ready"
-	InterviewStatusCompleted      = "completed"
+	InterviewStatusCreated             = "created"
+	InterviewStatusGeneratingQuestions = "generating_questions"
+	InterviewStatusQuestionsReady      = "questions_ready"
+	InterviewStatusInProgress          = "in_progress"
+	InterviewStatusCompleted           = "completed"
+	InterviewStatusFailed              = "failed"
+
+	QuestionLanguageZhTW = "zh-TW"
+	QuestionLanguageEnUS = "en-US"
 )
 
 type CreateInterviewRequest struct {
-	JobTitle       string `json:"job_title"`
-	JobDescription string `json:"job_description"`
-	UserProfile    string `json:"user_profile"`
-	QuestionCount  int    `json:"question_count"`
+	JobTitle         string `json:"job_title"`
+	JobDescription   string `json:"job_description"`
+	UserProfile      string `json:"user_profile"`
+	QuestionCount    int    `json:"question_count"`
+	QuestionLanguage string `json:"question_language"`
 }
 
 type CreateInterviewResponse struct {
@@ -21,14 +33,15 @@ type CreateInterviewResponse struct {
 }
 
 type Interview struct {
-	ID             string
-	JobTitle       string
-	JobDescription string
-	UserProfile    string
-	QuestionCount  int
-	Status         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID               string
+	JobTitle         string
+	JobDescription   string
+	UserProfile      string
+	QuestionCount    int
+	QuestionLanguage string
+	Status           string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type Question struct {
@@ -40,14 +53,15 @@ type Question struct {
 }
 
 type InterviewDetail struct {
-	ID             string
-	JobTitle       string
-	JobDescription string
-	UserProfile    string
-	QuestionCount  int
-	Status         string
-	Questions      []Question
-	Answers        []Answer
+	ID               string
+	JobTitle         string
+	JobDescription   string
+	UserProfile      string
+	QuestionCount    int
+	QuestionLanguage string
+	Status           string
+	Questions        []Question
+	Answers          []Answer
 }
 
 type Answer struct {
@@ -60,14 +74,15 @@ type Answer struct {
 }
 
 type InterviewDetailResponse struct {
-	ID             string             `json:"id"`
-	JobTitle       string             `json:"job_title"`
-	JobDescription string             `json:"job_description"`
-	UserProfile    string             `json:"user_profile"`
-	QuestionCount  int                `json:"question_count"`
-	Status         string             `json:"status"`
-	Questions      []QuestionResponse `json:"questions"`
-	Answers        []AnswerResponse   `json:"answers"`
+	ID               string             `json:"id"`
+	JobTitle         string             `json:"job_title"`
+	JobDescription   string             `json:"job_description"`
+	UserProfile      string             `json:"user_profile"`
+	QuestionCount    int                `json:"question_count"`
+	QuestionLanguage string             `json:"question_language"`
+	Status           string             `json:"status"`
+	Questions        []QuestionResponse `json:"questions"`
+	Answers          []AnswerResponse   `json:"answers"`
 }
 
 type QuestionResponse struct {

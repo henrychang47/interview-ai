@@ -17,7 +17,7 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 	handler := NewInterviewHandler(&stubInterviewService{
 		response: model.CreateInterviewResponse{
 			ID:     "interview-id",
-			Status: model.InterviewStatusQuestionsReady,
+			Status: model.InterviewStatusGeneratingQuestions,
 		},
 	}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
@@ -40,8 +40,8 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 	if body.ID != "interview-id" {
 		t.Fatalf("expected interview id, got %q", body.ID)
 	}
-	if body.Status != model.InterviewStatusQuestionsReady {
-		t.Fatalf("expected questions_ready, got %q", body.Status)
+	if body.Status != model.InterviewStatusGeneratingQuestions {
+		t.Fatalf("expected generating_questions, got %q", body.Status)
 	}
 }
 
@@ -140,6 +140,37 @@ func TestGetInterviewReturnsServerError(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusInternalServerError, "failed to get interview")
 }
 
+func TestStartInterviewReturnsInProgress(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{
+		startResponse: model.CreateInterviewResponse{ID: "interview-id", Status: model.InterviewStatusInProgress},
+	}, nil)
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/start", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	var body model.CreateInterviewResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("expected JSON response, got error: %v", err)
+	}
+	if body.ID != "interview-id" || body.Status != model.InterviewStatusInProgress {
+		t.Fatalf("unexpected start response: %+v", body)
+	}
+}
+
+func TestStartInterviewReturnsNotReady(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotReady}, nil)
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/start", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusConflict, "interview is not ready to start")
+}
+
 func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, status int, message string) {
 	t.Helper()
 	if response.Code != status {
@@ -159,6 +190,8 @@ type stubInterviewService struct {
 	err            error
 	detailResponse model.InterviewDetailResponse
 	getErr         error
+	startResponse  model.CreateInterviewResponse
+	startErr       error
 }
 
 func (s *stubInterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
@@ -167,4 +200,8 @@ func (s *stubInterviewService) CreateInterview(ctx context.Context, input model.
 
 func (s *stubInterviewService) GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error) {
 	return s.detailResponse, s.getErr
+}
+
+func (s *stubInterviewService) StartInterview(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error) {
+	return s.startResponse, s.startErr
 }

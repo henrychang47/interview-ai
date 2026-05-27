@@ -1,10 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview, uploadAnswerAudio } from '../api/interviews'
-import type { Answer, InterviewDetail } from '../types/interview'
+import type { InterviewDetail } from '../types/interview'
 
 type InterviewSessionPageProps = {
   interviewID: string
+}
+
+type SessionPhase =
+  | 'loading'
+  | 'playing_question'
+  | 'recording_answer'
+  | 'advancing'
+  | 'finishing_uploads'
+  | 'blocked'
+
+type UploadQueueItem = {
+  questionID: string
+  audio: Blob
+  attempts: number
+  status: 'queued' | 'uploading' | 'uploaded' | 'failed'
+  error: string | null
 }
 
 function getRecordingErrorMessage(error: unknown) {
@@ -27,76 +43,39 @@ function getRecordingErrorMessage(error: unknown) {
   return '無法開始錄音'
 }
 
+function navigateTo(path: string) {
+  window.history.pushState({}, '', path)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
+const maxRecordingSeconds = Number(import.meta.env.VITE_MAX_ANSWER_RECORDING_SECONDS ?? 180)
+const safeMaxRecordingSeconds =
+  Number.isFinite(maxRecordingSeconds) && maxRecordingSeconds > 0 ? maxRecordingSeconds : 180
+
 export default function InterviewSessionPage({ interviewID }: InterviewSessionPageProps) {
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
+  const [phase, setPhase] = useState<SessionPhase>('loading')
   const [error, setError] = useState<string | null>(null)
-  const [isPlayingQuestion, setIsPlayingQuestion] = useState(false)
-  const [isRecordingAnswer, setIsRecordingAnswer] = useState(false)
-  const [recordedAnswerBlob, setRecordedAnswerBlob] = useState<Blob | null>(null)
-  const [recordedAnswerURL, setRecordedAnswerURL] = useState<string | null>(null)
-  const [uploadedAnswersByQuestionID, setUploadedAnswersByQuestionID] = useState<
-    Record<string, Answer>
-  >({})
-  const [isUploadingAnswer, setIsUploadingAnswer] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
   const [recordingError, setRecordingError] = useState<string | null>(null)
+  const [secondsRemaining, setSecondsRemaining] = useState(safeMaxRecordingSeconds)
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
-  const recordedAnswerURLRef = useRef<string | null>(null)
-  const shouldCreateRecordedPreviewRef = useRef(true)
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadInterview() {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const detail = await getInterview(interviewID)
-        if (isMounted) {
-          const uploadedAnswers = detail.answers.reduce<Record<string, Answer>>(
-            (answersByQuestionID, answer) => {
-              answersByQuestionID[answer.question_id] = answer
-              return answersByQuestionID
-            },
-            {},
-          )
-
-          setInterview(detail)
-          setUploadedAnswersByQuestionID(uploadedAnswers)
-          setCurrentQuestionIndex(0)
-        }
-      } catch (error) {
-        if (isMounted) {
-          setError(error instanceof Error ? error.message : '載入面試失敗')
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadInterview()
-
-    return () => {
-      isMounted = false
-    }
-  }, [interviewID])
+  const discardRecordingRef = useRef(false)
+  const autoPlayKeyRef = useRef<string | null>(null)
 
   const questions = interview?.questions ?? []
   const currentQuestion = questions[currentQuestionIndex]
-  const isFirstQuestion = currentQuestionIndex === 0
-  const isLastQuestion = currentQuestionIndex === questions.length - 1
-  const currentUploadedAnswer = currentQuestion
-    ? uploadedAnswersByQuestionID[currentQuestion.id]
-    : undefined
-  const canUploadCurrentAnswer = Boolean(currentQuestion && recordedAnswerBlob && !isUploadingAnswer)
-  const canMoveToNextQuestion = Boolean(currentQuestion && currentUploadedAnswer && !isUploadingAnswer)
+  const canSpeakQuestion =
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window &&
+    typeof SpeechSynthesisUtterance !== 'undefined'
+  const canRecordAnswer =
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof MediaRecorder !== 'undefined'
 
   const progressPercent = useMemo(() => {
     if (questions.length === 0) {
@@ -105,76 +84,65 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     return ((currentQuestionIndex + 1) / questions.length) * 100
   }, [currentQuestionIndex, questions.length])
 
-  const canSpeakQuestion =
-    typeof window !== 'undefined' &&
-    'speechSynthesis' in window &&
-    typeof SpeechSynthesisUtterance !== 'undefined'
+  const stopMediaStream = useCallback(() => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+  }, [])
 
-  const canRecordAnswer =
-    typeof navigator !== 'undefined' &&
-    Boolean(navigator.mediaDevices?.getUserMedia) &&
-    typeof MediaRecorder !== 'undefined'
-
-  function playCurrentQuestion() {
-    if (!currentQuestion || !canSpeakQuestion) {
-      return
-    }
-
-    window.speechSynthesis.cancel()
-
-    const utterance = new SpeechSynthesisUtterance(currentQuestion.text)
-    utterance.lang = 'zh-TW'
-    utterance.onend = () => setIsPlayingQuestion(false)
-    utterance.onerror = () => setIsPlayingQuestion(false)
-
-    setIsPlayingQuestion(true)
-    window.speechSynthesis.speak(utterance)
-  }
-
-  function stopQuestionPlayback() {
+  const stopQuestionPlayback = useCallback(() => {
     if (canSpeakQuestion) {
       window.speechSynthesis.cancel()
     }
-    setIsPlayingQuestion(false)
-  }
+  }, [canSpeakQuestion])
 
-  function revokeRecordedAnswerURL() {
-    if (recordedAnswerURLRef.current) {
-      URL.revokeObjectURL(recordedAnswerURLRef.current)
-      recordedAnswerURLRef.current = null
-    }
-    setRecordedAnswerURL(null)
-    setRecordedAnswerBlob(null)
-    setUploadError(null)
-  }
+  const queueAnswerUpload = useCallback(
+    (questionID: string, audio: Blob) => {
+      setUploadQueue((items) => [
+        ...items.filter((item) => item.questionID !== questionID),
+        { questionID, audio, attempts: 0, status: 'queued', error: null },
+      ])
 
-  function revokeRecordedAnswerURLOnUnmount() {
-    if (recordedAnswerURLRef.current) {
-      URL.revokeObjectURL(recordedAnswerURLRef.current)
-      recordedAnswerURLRef.current = null
-    }
-  }
+      if (currentQuestionIndex >= questions.length - 1) {
+        setPhase('finishing_uploads')
+      } else {
+        setPhase('advancing')
+        setCurrentQuestionIndex((index) => index + 1)
+      }
+    },
+    [currentQuestionIndex, questions.length],
+  )
 
-  function stopMediaStream() {
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
-    mediaStreamRef.current = null
-  }
+  const stopAnswerRecording = useCallback(
+    ({ discard }: { discard: boolean }) => {
+      discardRecordingRef.current = discard
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop()
+        return
+      }
+      stopMediaStream()
+      if (discard) {
+        setPhase('playing_question')
+      }
+    },
+    [stopMediaStream],
+  )
 
-  async function startAnswerRecording() {
-    if (!canRecordAnswer || isRecordingAnswer) {
+  const startAnswerRecording = useCallback(async () => {
+    if (!currentQuestion || !canRecordAnswer) {
+      setPhase('blocked')
+      setRecordingError('此瀏覽器不支援錄音。')
       return
     }
 
-    stopQuestionPlayback()
-    revokeRecordedAnswerURL()
     setRecordingError(null)
+    setSecondsRemaining(safeMaxRecordingSeconds)
     recordedChunksRef.current = []
-    shouldCreateRecordedPreviewRef.current = true
+    discardRecordingRef.current = false
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaStreamRef.current = stream
-
       const recorderOptions =
         typeof MediaRecorder.isTypeSupported === 'function' &&
         MediaRecorder.isTypeSupported('audio/webm')
@@ -188,105 +156,184 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
         }
       }
       recorder.onstop = () => {
-        if (shouldCreateRecordedPreviewRef.current) {
-          const recordedBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
-          const recordedURL = URL.createObjectURL(recordedBlob)
-          recordedAnswerURLRef.current = recordedURL
-          setRecordedAnswerBlob(recordedBlob)
-          setRecordedAnswerURL(recordedURL)
-          setUploadError(null)
-        }
-        setIsRecordingAnswer(false)
+        const shouldDiscard = discardRecordingRef.current
+        const recordedBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
+        mediaRecorderRef.current = null
+        recordedChunksRef.current = []
         stopMediaStream()
+
+      if (shouldDiscard) {
+          autoPlayKeyRef.current = null
+          setPhase('playing_question')
+          return
+        }
+
+        queueAnswerUpload(currentQuestion.id, recordedBlob)
       }
 
       mediaRecorderRef.current = recorder
       recorder.start()
-      setIsRecordingAnswer(true)
+      setPhase('recording_answer')
     } catch (error) {
-      setIsRecordingAnswer(false)
       stopMediaStream()
+      setPhase('blocked')
       setRecordingError(getRecordingErrorMessage(error))
     }
-  }
+  }, [canRecordAnswer, currentQuestion, queueAnswerUpload, stopMediaStream])
 
-  async function uploadCurrentAnswer() {
-    if (!currentQuestion || !recordedAnswerBlob || isUploadingAnswer) {
+  const playCurrentQuestion = useCallback(() => {
+    if (!currentQuestion || !interview || !canSpeakQuestion) {
+      setPhase('blocked')
       return
     }
 
-    setIsUploadingAnswer(true)
-    setUploadError(null)
+    stopQuestionPlayback()
+    setPhase('playing_question')
 
-    try {
-      const uploadedAnswer = await uploadAnswerAudio(interviewID, currentQuestion.id, recordedAnswerBlob)
-      setUploadedAnswersByQuestionID((answersByQuestionID) => ({
-        ...answersByQuestionID,
-        [uploadedAnswer.question_id]: {
-          id: uploadedAnswer.id,
-          question_id: uploadedAnswer.question_id,
-          audio_path: uploadedAnswer.audio_path,
-          transcript_text: uploadedAnswer.transcript_text,
-          created_at: new Date().toISOString(),
-        },
-      }))
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : '上傳回答失敗')
-    } finally {
-      setIsUploadingAnswer(false)
+    const utterance = new SpeechSynthesisUtterance(currentQuestion.text)
+    utterance.lang = interview.question_language || 'zh-TW'
+    utterance.onend = () => {
+      void startAnswerRecording()
     }
-  }
+    utterance.onerror = () => {
+      setPhase('blocked')
+    }
 
-  function stopAnswerRecording() {
-    const recorder = mediaRecorderRef.current
-    if (!recorder || recorder.state === 'inactive') {
+    window.speechSynthesis.speak(utterance)
+  }, [canSpeakQuestion, currentQuestion, interview, startAnswerRecording, stopQuestionPlayback])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadInterview() {
+      setPhase('loading')
+      setError(null)
+
+      try {
+        const detail = await getInterview(interviewID)
+        if (!isMounted) {
+          return
+        }
+        setInterview(detail)
+        if (detail.status !== 'in_progress') {
+          setPhase('blocked')
+          setError('請先從準備頁開始面試。')
+          return
+        }
+        setPhase('advancing')
+      } catch (error) {
+        if (isMounted) {
+          setPhase('blocked')
+          setError(error instanceof Error ? error.message : '載入面試失敗')
+        }
+      }
+    }
+
+    loadInterview()
+
+    return () => {
+      isMounted = false
+    }
+  }, [interviewID])
+
+  useEffect(() => {
+    if (!currentQuestion || phase === 'loading' || phase === 'blocked' || phase === 'finishing_uploads') {
       return
     }
 
-    shouldCreateRecordedPreviewRef.current = true
-    recorder.stop()
-  }
+    const autoPlayKey = `${currentQuestion.id}:${currentQuestionIndex}`
+    if (autoPlayKeyRef.current === autoPlayKey) {
+      return
+    }
+    autoPlayKeyRef.current = autoPlayKey
+    playCurrentQuestion()
+  }, [currentQuestion, currentQuestionIndex, phase, playCurrentQuestion])
 
-  function resetAnswerRecording() {
-    shouldCreateRecordedPreviewRef.current = false
-    const recorder = mediaRecorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop()
-    } else {
-      stopMediaStream()
+  useEffect(() => {
+    if (phase !== 'recording_answer') {
+      return
     }
 
-    mediaRecorderRef.current = null
-    recordedChunksRef.current = []
-    setIsRecordingAnswer(false)
-    setRecordingError(null)
-    revokeRecordedAnswerURL()
-  }
+    const intervalID = window.setInterval(() => {
+      setSecondsRemaining((seconds) => {
+        if (seconds <= 1) {
+          window.clearInterval(intervalID)
+          stopAnswerRecording({ discard: false })
+          return 0
+        }
+        return seconds - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(intervalID)
+  }, [phase, stopAnswerRecording])
+
+  useEffect(() => {
+    const nextItem = uploadQueue.find((item) => item.status === 'queued')
+    if (!nextItem) {
+      return
+    }
+    const itemToUpload = nextItem
+
+    async function upload() {
+      setUploadQueue((items) =>
+        items.map((item) =>
+          item.questionID === itemToUpload.questionID
+            ? { ...item, status: 'uploading', attempts: item.attempts + 1, error: null }
+            : item,
+        ),
+      )
+
+      try {
+        await uploadAnswerAudio(interviewID, itemToUpload.questionID, itemToUpload.audio)
+        setUploadQueue((items) =>
+          items.map((item) =>
+            item.questionID === itemToUpload.questionID
+              ? { ...item, status: 'uploaded', error: null }
+              : item,
+          ),
+        )
+      } catch (error) {
+        setUploadQueue((items) =>
+          items.map((item) =>
+            item.questionID === itemToUpload.questionID
+              ? {
+                  ...item,
+                  status: item.attempts + 1 >= 3 ? 'failed' : 'queued',
+                  error: error instanceof Error ? error.message : '上傳回答失敗',
+                }
+              : item,
+          ),
+        )
+      }
+    }
+
+    upload()
+  }, [interviewID, uploadQueue])
+
+  useEffect(() => {
+    if (phase !== 'finishing_uploads' || uploadQueue.length === 0) {
+      return
+    }
+    if (uploadQueue.every((item) => item.status === 'uploaded')) {
+      window.setTimeout(() => navigateTo(`/interviews/${interviewID}/result`), 0)
+    }
+  }, [interviewID, phase, uploadQueue])
 
   useEffect(() => {
     return () => {
-      shouldCreateRecordedPreviewRef.current = false
+      stopQuestionPlayback()
+      discardRecordingRef.current = true
       const recorder = mediaRecorderRef.current
       if (recorder && recorder.state !== 'inactive') {
         recorder.stop()
       } else {
-        mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+        stopMediaStream()
       }
-      revokeRecordedAnswerURLOnUnmount()
     }
-  }, [])
+  }, [stopMediaStream, stopQuestionPlayback])
 
-  useEffect(() => {
-    return () => {
-      if (
-        typeof window !== 'undefined' &&
-        'speechSynthesis' in window &&
-        typeof SpeechSynthesisUtterance !== 'undefined'
-      ) {
-        window.speechSynthesis.cancel()
-      }
-    }
-  }, [])
+  const failedUpload = uploadQueue.find((item) => item.status === 'failed')
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -298,7 +345,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           返回面試詳情
         </a>
 
-        {isLoading ? <p className="mt-8 text-slate-600">載入面試中...</p> : null}
+        {phase === 'loading' ? <p className="mt-8 text-slate-600">載入面試中...</p> : null}
 
         {error ? (
           <div className="mt-8 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -332,108 +379,96 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                   />
                 </div>
 
-                <article className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                  <p className="text-xl font-semibold leading-8 text-slate-950">
-                    {currentQuestion.text}
-                  </p>
-                </article>
-
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={playCurrentQuestion}
-                    disabled={!canSpeakQuestion || isPlayingQuestion}
-                    className="min-h-11 rounded-md border border-teal-700 bg-white px-5 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isPlayingQuestion ? '朗讀中' : '朗讀題目'}
-                  </button>
-                  {!canSpeakQuestion ? (
-                    <p className="mt-2 text-sm text-slate-600">此瀏覽器不支援題目朗讀。</p>
+                <div className="mt-8 rounded-md border border-slate-200 bg-white p-6">
+                  {phase === 'playing_question' ? (
+                    <h2 className="text-xl font-semibold text-slate-900">正在播放題目</h2>
                   ) : null}
-                </div>
-
-                <div className="mt-5 rounded-md border border-slate-200 bg-white p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={startAnswerRecording}
-                      disabled={!canRecordAnswer || isRecordingAnswer}
-                      className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isRecordingAnswer ? '錄音中' : '開始錄音'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopAnswerRecording}
-                      disabled={!isRecordingAnswer}
-                      className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      停止錄音
-                    </button>
-                  </div>
-                  {!canRecordAnswer ? (
-                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援錄音。</p>
+                  {phase === 'recording_answer' ? (
+                    <>
+                      <h2 className="text-xl font-semibold text-slate-900">正在錄音</h2>
+                      <p className="mt-2 text-sm text-slate-600">
+                        剩餘 {secondsRemaining} 秒
+                      </p>
+                    </>
                   ) : null}
+                  {phase === 'advancing' ? (
+                    <h2 className="text-xl font-semibold text-slate-900">準備下一題</h2>
+                  ) : null}
+                  {phase === 'finishing_uploads' ? (
+                    <h2 className="text-xl font-semibold text-slate-900">正在完成面試</h2>
+                  ) : null}
+                  {phase === 'blocked' && !error ? (
+                    <h2 className="text-xl font-semibold text-slate-900">面試暫停</h2>
+                  ) : null}
+
                   {recordingError ? (
                     <p className="mt-3 text-sm text-red-700">{recordingError}</p>
                   ) : null}
-                  {recordedAnswerURL ? (
-                    <div className="mt-4">
-                      <p className="mb-2 text-sm font-medium text-slate-700">回答錄音預覽</p>
-                      <audio aria-label="回答錄音預覽" controls src={recordedAnswerURL} />
-                    </div>
+                  {!canSpeakQuestion ? (
+                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援題目朗讀。</p>
                   ) : null}
-                  {recordedAnswerURL ? (
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <button
-                        type="button"
-                        onClick={uploadCurrentAnswer}
-                        disabled={!canUploadCurrentAnswer || Boolean(currentUploadedAnswer)}
-                        className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isUploadingAnswer ? '上傳中' : '上傳本題回答'}
-                      </button>
-                    </div>
+                  {!canRecordAnswer ? (
+                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援錄音。</p>
                   ) : null}
-                  {currentUploadedAnswer ? (
-                    <p className="mt-3 text-sm font-medium text-teal-700">本題回答已上傳</p>
+                  {failedUpload ? (
+                    <p className="mt-3 text-sm text-red-700">{failedUpload.error}</p>
                   ) : null}
-                  {uploadError ? <p className="mt-3 text-sm text-red-700">{uploadError}</p> : null}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
+                <div className="mt-6 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      stopQuestionPlayback()
-                      resetAnswerRecording()
-                      setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
-                    }}
-                    disabled={isFirstQuestion}
-                    className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    上一題
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canMoveToNextQuestion) {
-                        return
-                      }
-                      stopQuestionPlayback()
-                      resetAnswerRecording()
-                      if (isLastQuestion) {
-                        window.history.pushState({}, '', `/interviews/${interviewID}/result`)
-                        window.dispatchEvent(new PopStateEvent('popstate'))
-                        return
-                      }
-                      setCurrentQuestionIndex((index) => Math.min(index + 1, questions.length - 1))
-                    }}
-                    disabled={!canMoveToNextQuestion}
+                    onClick={() => stopAnswerRecording({ discard: false })}
+                    disabled={phase !== 'recording_answer'}
                     className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isLastQuestion ? '完成面試' : '下一題'}
+                    回答結束
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => stopAnswerRecording({ discard: true })}
+                    disabled={phase !== 'recording_answer'}
+                    className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    重新播放題目
+                  </button>
+                  {failedUpload ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUploadQueue((items) =>
+                            items.map((item) =>
+                              item.status === 'failed'
+                                ? { ...item, status: 'queued', error: null }
+                                : item,
+                            ),
+                          )
+                        }
+                        className="min-h-11 rounded-md border border-teal-700 px-5 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+                      >
+                        重試上傳
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const questionIndex = questions.findIndex(
+                            (question) => question.id === failedUpload.questionID,
+                          )
+                          if (questionIndex >= 0) {
+                            setCurrentQuestionIndex(questionIndex)
+                            setUploadQueue((items) =>
+                              items.filter((item) => item.questionID !== failedUpload.questionID),
+                            )
+                            setPhase('playing_question')
+                          }
+                        }}
+                        className="min-h-11 rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+                      >
+                        重新回答本題
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </section>
             ) : (

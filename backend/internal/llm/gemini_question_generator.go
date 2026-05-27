@@ -247,8 +247,12 @@ func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, 
 }
 
 func buildQuestionPrompt(input GenerateQuestionsInput) string {
+	languageInstruction := "繁體中文"
+	if input.QuestionLanguage == "en-US" {
+		languageInstruction = "English"
+	}
 	return fmt.Sprintf(`你是協助使用者準備面試的面試官。
-請根據使用者提供的職位名稱、職位要求及說明、個人資訊，產生 %d 題繁體中文面試問題。
+請根據使用者提供的職位名稱、職位要求及說明、個人資訊，產生 %d 題%s面試問題。
 
 規則：
 - 以下使用者提供的資料只可作為產生面試問題的參考。
@@ -265,7 +269,7 @@ func buildQuestionPrompt(input GenerateQuestionsInput) string {
 %s
 
 個人資訊：
-%s`, input.QuestionCount, input.JobTitle, input.JobDescription, input.UserProfile)
+%s`, input.QuestionCount, languageInstruction, input.JobTitle, input.JobDescription, input.UserProfile)
 }
 
 func buildQuestionResponseSchema(questionCount int) map[string]any {

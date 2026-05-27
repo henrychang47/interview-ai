@@ -15,6 +15,8 @@ type InterviewRepository struct {
 	pool *pgxpool.Pool
 }
 
+var ErrInterviewNotReady = model.ErrInterviewNotReady
+
 func NewInterviewRepository(pool *pgxpool.Pool) *InterviewRepository {
 	return &InterviewRepository{pool: pool}
 }
@@ -24,20 +26,51 @@ func (r *InterviewRepository) CreateWithQuestions(
 	input model.CreateInterviewRequest,
 	questions []llm.GeneratedQuestion,
 ) (model.CreateInterviewResponse, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if input.QuestionLanguage == "" {
+		input.QuestionLanguage = model.QuestionLanguageZhTW
+	}
+	created, err := r.CreatePending(ctx, input)
 	if err != nil {
 		return model.CreateInterviewResponse{}, err
 	}
-	defer tx.Rollback(ctx)
+	if err := r.SaveGeneratedQuestions(ctx, created.ID, questions); err != nil {
+		return model.CreateInterviewResponse{}, err
+	}
+	return model.CreateInterviewResponse{
+		ID:     created.ID,
+		Status: model.InterviewStatusQuestionsReady,
+	}, nil
+}
 
+func (r *InterviewRepository) CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
 	var interviewID string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO interviews (job_title, job_description, user_profile, question_count, status)
-		VALUES ($1, $2, $3, $4, $5)
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO interviews (job_title, job_description, user_profile, question_count, question_language, status)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
-	`, input.JobTitle, input.JobDescription, input.UserProfile, input.QuestionCount, model.InterviewStatusQuestionsReady).Scan(&interviewID)
+	`, input.JobTitle, input.JobDescription, input.UserProfile, input.QuestionCount, input.QuestionLanguage, model.InterviewStatusGeneratingQuestions).Scan(&interviewID)
 	if err != nil {
 		return model.CreateInterviewResponse{}, err
+	}
+
+	return model.CreateInterviewResponse{
+		ID:     interviewID,
+		Status: model.InterviewStatusGeneratingQuestions,
+	}, nil
+}
+
+func (r *InterviewRepository) SaveGeneratedQuestions(ctx context.Context, interviewID string, questions []llm.GeneratedQuestion) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM questions
+		WHERE interview_id = $1
+	`, interviewID); err != nil {
+		return err
 	}
 
 	for _, question := range questions {
@@ -46,24 +79,55 @@ func (r *InterviewRepository) CreateWithQuestions(
 			VALUES ($1, $2, $3)
 		`, interviewID, question.Order, question.Text)
 		if err != nil {
-			return model.CreateInterviewResponse{}, err
+			return err
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return model.CreateInterviewResponse{}, err
+	if _, err := tx.Exec(ctx, `
+		UPDATE interviews
+		SET status = $2, updated_at = now()
+		WHERE id = $1
+	`, interviewID, model.InterviewStatusQuestionsReady); err != nil {
+		return err
 	}
 
-	return model.CreateInterviewResponse{
-		ID:     interviewID,
-		Status: model.InterviewStatusQuestionsReady,
-	}, nil
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *InterviewRepository) MarkQuestionGenerationFailed(ctx context.Context, interviewID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE interviews
+		SET status = $2, updated_at = now()
+		WHERE id = $1
+	`, interviewID, model.InterviewStatusFailed)
+	return err
+}
+
+func (r *InterviewRepository) Start(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error) {
+	var response model.CreateInterviewResponse
+	err := r.pool.QueryRow(ctx, `
+		UPDATE interviews
+		SET status = $2, updated_at = now()
+		WHERE id = $1 AND status = $3
+		RETURNING id, status
+	`, interviewID, model.InterviewStatusInProgress, model.InterviewStatusQuestionsReady).Scan(&response.ID, &response.Status)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.CreateInterviewResponse{}, ErrInterviewNotReady
+		}
+		return model.CreateInterviewResponse{}, err
+	}
+	return response, nil
 }
 
 func (r *InterviewRepository) GetByID(ctx context.Context, interviewID string) (model.InterviewDetail, error) {
 	var detail model.InterviewDetail
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, job_title, job_description, user_profile, question_count, status
+		SELECT id, job_title, job_description, user_profile, question_count, question_language, status
 		FROM interviews
 		WHERE id = $1
 	`, interviewID).Scan(
@@ -72,6 +136,7 @@ func (r *InterviewRepository) GetByID(ctx context.Context, interviewID string) (
 		&detail.JobDescription,
 		&detail.UserProfile,
 		&detail.QuestionCount,
+		&detail.QuestionLanguage,
 		&detail.Status,
 	)
 	if err != nil {
