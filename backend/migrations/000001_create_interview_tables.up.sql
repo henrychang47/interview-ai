@@ -6,11 +6,8 @@ CREATE TABLE interviews (
     job_description TEXT NOT NULL,
     user_profile TEXT NOT NULL,
     question_count INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 10),
-    question_language TEXT NOT NULL DEFAULT 'zh-TW' CHECK (
-        question_language IN ('zh-TW', 'en-US')
-    ),
     status TEXT NOT NULL DEFAULT 'created' CHECK (
-        status IN ('created', 'generating_questions', 'questions_ready', 'in_progress', 'completed', 'failed')
+        status IN ('created', 'questions_ready', 'in_progress', 'completed', 'failed')
     ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -30,6 +30,8 @@ Run migrations:
 docker compose run --rm migrate
 ```
 
+Run this command again after pulling updates. The app uses incremental SQL migrations, so existing local databases need the newest migration before creating interviews.
+
 Verify tables:
 
 ```powershell
