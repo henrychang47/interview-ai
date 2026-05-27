@@ -18,10 +18,11 @@ type InterviewService interface {
 	GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error)
 }
 
-func NewInterviewHandler(interviewService InterviewService) http.Handler {
+func NewInterviewHandler(interviewService InterviewService, answerService AnswerService) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/", createInterview(interviewService))
 	router.Get("/{interviewID}", getInterview(interviewService))
+	router.Post("/{interviewID}/questions/{questionID}/answer", uploadAnswer(answerService))
 	return router
 }
 

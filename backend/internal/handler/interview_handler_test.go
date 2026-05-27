@@ -19,7 +19,7 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 			ID:     "interview-id",
 			Status: model.InterviewStatusQuestionsReady,
 		},
-	})
+	}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
@@ -46,7 +46,7 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 }
 
 func TestCreateInterviewRejectsInvalidJSON(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{})
+	handler := NewInterviewHandler(&stubInterviewService{}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{`))
 	response := httptest.NewRecorder()
 
@@ -56,7 +56,7 @@ func TestCreateInterviewRejectsInvalidJSON(t *testing.T) {
 }
 
 func TestCreateInterviewReturnsValidationError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrJobTitleRequired})
+	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrJobTitleRequired}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"",
 		"job_description":"需要熟悉 Go",
@@ -71,7 +71,7 @@ func TestCreateInterviewReturnsValidationError(t *testing.T) {
 }
 
 func TestCreateInterviewReturnsServerError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{err: errors.New("db failed")})
+	handler := NewInterviewHandler(&stubInterviewService{err: errors.New("db failed")}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go",
@@ -99,7 +99,7 @@ func TestGetInterviewReturnsDetail(t *testing.T) {
 			},
 			Answers: []model.AnswerResponse{},
 		},
-	})
+	}, nil)
 	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
 	response := httptest.NewRecorder()
 
@@ -121,7 +121,7 @@ func TestGetInterviewReturnsDetail(t *testing.T) {
 }
 
 func TestGetInterviewReturnsNotFound(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{getErr: service.ErrInterviewNotFound})
+	handler := NewInterviewHandler(&stubInterviewService{getErr: service.ErrInterviewNotFound}, nil)
 	request := httptest.NewRequest(http.MethodGet, "/missing-id", nil)
 	response := httptest.NewRecorder()
 
@@ -131,7 +131,7 @@ func TestGetInterviewReturnsNotFound(t *testing.T) {
 }
 
 func TestGetInterviewReturnsServerError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{getErr: errors.New("db failed")})
+	handler := NewInterviewHandler(&stubInterviewService{getErr: errors.New("db failed")}, nil)
 	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
 	response := httptest.NewRecorder()
 

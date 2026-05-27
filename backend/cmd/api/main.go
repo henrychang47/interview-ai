@@ -11,6 +11,7 @@ import (
 	"interview-ai/backend/internal/llm"
 	"interview-ai/backend/internal/repository"
 	"interview-ai/backend/internal/service"
+	"interview-ai/backend/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,9 +30,12 @@ func main() {
 	defer pool.Close()
 
 	interviewRepository := repository.NewInterviewRepository(pool)
+	answerRepository := repository.NewAnswerRepository(pool)
+	audioStorage := storage.NewLocalAudioStorage("storage/audio")
 	questionGenerator := questionGeneratorForConfig(cfg)
 	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
-	interviewHandler := handler.NewInterviewHandler(interviewService)
+	answerService := service.NewAnswerService(audioStorage, answerRepository)
+	interviewHandler := handler.NewInterviewHandler(interviewService, answerService)
 
 	log.Println("starting interview-ai backend on :8080")
 	if err := http.ListenAndServe(":8080", newRouter(interviewHandler)); err != nil {

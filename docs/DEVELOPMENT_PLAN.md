@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 9 - 前端錄音
+- Current step: Step 10 - 回答音檔上傳 API
 - Status: Completed
 - Last updated: 2026-05-27
 
@@ -21,7 +21,7 @@
 | 7 | 模擬面試頁 | Completed |
 | 8 | TTS 朗讀題目 | Completed |
 | 9 | 前端錄音 | Completed |
-| 10 | 回答音檔上傳 API | Not started |
+| 10 | 回答音檔上傳 API | Completed |
 | 11 | 完成整場面試流程 | Not started |
 | 12 | 面試結果頁 | Not started |
 
@@ -155,6 +155,24 @@ Verification:
 - Browser verification confirmed the session page renders recording controls and surfaces local recording device errors.
 - Automated MediaRecorder tests confirmed users can record an answer and play it back locally.
 
+## Step 10 Completion
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added `POST /api/interviews/{interview_id}/questions/{question_id}/answer`.
+- Accepted required multipart `audio` uploads with `audio/webm` content type.
+- Saved answer audio to local `backend/storage/audio`.
+- Created or updated `answers` rows for each interview/question pair.
+- Returned uploaded answer metadata with `transcript_text` as `null`.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- Repository integration tests passed with `DATABASE_URL` configured.
+- Manual API verification uploaded `answer.webm`, confirmed the file in local storage, and confirmed the answer through `GET /api/interviews/{id}`.
+
 ## Next Step
 
-Step 10 - 回答音檔上傳 API.
+Step 11 - 完成整場面試流程.

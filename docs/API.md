@@ -116,3 +116,66 @@ Errors:
 ```json
 {"error":"failed to get interview"}
 ```
+
+## Upload Answer Audio
+
+```http
+POST /api/interviews/{interview_id}/questions/{question_id}/answer
+Content-Type: multipart/form-data
+```
+
+Form fields:
+
+```text
+audio: required WebM audio file
+```
+
+Success response:
+
+```http
+201 Created
+```
+
+```json
+{
+  "id": "answer_uuid",
+  "interview_id": "interview_uuid",
+  "question_id": "question_uuid",
+  "audio_path": "storage/audio/interview_uuid/question_uuid.webm",
+  "transcript_text": null
+}
+```
+
+Errors:
+
+```json
+{"error":"audio file is required"}
+```
+
+```json
+{"error":"audio file must be audio/webm"}
+```
+
+```json
+{"error":"interview not found"}
+```
+
+```json
+{"error":"question not found for interview"}
+```
+
+```json
+{"error":"failed to save answer audio"}
+```
+
+```json
+{"error":"failed to save answer"}
+```
+
+Curl verification:
+
+```bash
+curl -X POST \
+  -F "audio=@answer.webm;type=audio/webm" \
+  http://localhost:8080/api/interviews/{interview_id}/questions/{question_id}/answer
+```

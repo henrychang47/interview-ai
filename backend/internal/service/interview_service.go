@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	ErrJobTitleRequired       = errors.New("job_title is required")
-	ErrJobDescriptionRequired = errors.New("job_description is required")
-	ErrUserProfileRequired    = errors.New("user_profile is required")
-	ErrQuestionCountRange     = errors.New("question_count must be between 1 and 10")
-	ErrInterviewNotFound      = errors.New("interview not found")
+	ErrJobTitleRequired             = errors.New("job_title is required")
+	ErrJobDescriptionRequired       = errors.New("job_description is required")
+	ErrUserProfileRequired          = errors.New("user_profile is required")
+	ErrQuestionCountRange           = errors.New("question_count must be between 1 and 10")
+	ErrInterviewNotFound            = errors.New("interview not found")
+	ErrQuestionNotFoundForInterview = errors.New("question not found for interview")
 )
 
 type InterviewRepository interface {

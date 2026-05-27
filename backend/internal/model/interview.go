@@ -82,3 +82,11 @@ type AnswerResponse struct {
 	TranscriptText *string `json:"transcript_text"`
 	CreatedAt      string  `json:"created_at"`
 }
+
+type UploadAnswerResponse struct {
+	ID             string  `json:"id"`
+	InterviewID    string  `json:"interview_id"`
+	QuestionID     string  `json:"question_id"`
+	AudioPath      string  `json:"audio_path"`
+	TranscriptText *string `json:"transcript_text"`
+}
