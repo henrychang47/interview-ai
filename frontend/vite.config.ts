@@ -17,6 +17,10 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
       },
+      '/audio': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
     },
   },
   test: {
