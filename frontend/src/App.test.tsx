@@ -259,6 +259,93 @@ describe('App', () => {
     expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
   })
 
+  it('loads the completed interview result page with playable answers', async () => {
+    mockPathname('/interviews/interview-123/result')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 2,
+        status: 'completed',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+          { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
+        ],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+          {
+            id: 'answer-2',
+            question_id: 'question-2',
+            audio_path: 'storage/audio/interview-123/question-2.webm',
+            transcript_text: '我會先確認需求，再設計 resource 與錯誤格式。',
+            created_at: '2026-05-27T06:31:04Z',
+          },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '面試結果' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '後端工程師' })).toBeInTheDocument()
+    expect(screen.getByText('需要熟悉 Go、PostgreSQL、REST API')).toBeInTheDocument()
+    expect(screen.getByText('有 Java 和 Go 學習經驗')).toBeInTheDocument()
+    expect(screen.getByText('completed')).toBeInTheDocument()
+    expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
+    expect(screen.getByText('尚未轉錄')).toBeInTheDocument()
+    expect(screen.getByText('我會先確認需求，再設計 resource 與錯誤格式。')).toBeInTheDocument()
+    expect(screen.getByLabelText('問題 1 回答音檔')).toHaveAttribute(
+      'src',
+      '/audio/interview-123/question-1.webm',
+    )
+    expect(screen.getByLabelText('問題 2 回答音檔')).toHaveAttribute(
+      'src',
+      '/audio/interview-123/question-2.webm',
+    )
+  })
+
+  it('shows a missing-answer state on the result page', async () => {
+    mockPathname('/interviews/interview-123/result')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 學習經驗',
+        question_count: 1,
+        status: 'completed',
+        questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('第一題')).toBeInTheDocument()
+    expect(screen.getByText('尚未上傳回答')).toBeInTheDocument()
+    expect(screen.queryByLabelText('問題 1 回答音檔')).not.toBeInTheDocument()
+  })
+
+  it('shows an API error when loading a result page fails', async () => {
+    mockPathname('/interviews/missing/result')
+    vi.stubGlobal('fetch', mockFetchOnce({ error: 'interview not found' }, { status: 404 }))
+
+    render(<App />)
+
+    expect(await screen.findByText('interview not found')).toBeInTheDocument()
+  })
+
   it('speaks the current session question when the play button is clicked', async () => {
     const speech = installSpeechSynthesisMock()
     mockPathname('/interviews/interview-123/session')
@@ -814,6 +901,31 @@ describe('App', () => {
           { status: 201, headers: { 'Content-Type': 'application/json' } },
         ),
       )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 1,
+            status: 'completed',
+            questions: [
+              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+            ],
+            answers: [
+              {
+                id: 'answer-1',
+                question_id: 'question-1',
+                audio_path: 'storage/audio/interview-123/question-1.webm',
+                transcript_text: null,
+                created_at: '2026-05-27T06:30:04Z',
+              },
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
@@ -875,6 +987,31 @@ describe('App', () => {
           { status: 201, headers: { 'Content-Type': 'application/json' } },
         ),
       )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 1,
+            status: 'completed',
+            questions: [
+              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+            ],
+            answers: [
+              {
+                id: 'answer-1',
+                question_id: 'question-1',
+                audio_path: 'storage/audio/interview-123/question-1.webm',
+                transcript_text: null,
+                created_at: '2026-05-27T06:30:04Z',
+              },
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
@@ -892,7 +1029,11 @@ describe('App', () => {
     expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '完成面試' }))
 
-    expect(await screen.findByRole('heading', { name: '面試已完成' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '面試結果' })).toBeInTheDocument()
+    expect(screen.getByLabelText('問題 1 回答音檔')).toHaveAttribute(
+      'src',
+      '/audio/interview-123/question-1.webm',
+    )
     expect(window.location.pathname).toBe('/interviews/interview-123/result')
   })
 

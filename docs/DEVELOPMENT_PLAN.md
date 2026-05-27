@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 11 - 完成整場面試流程
+- Current step: Step 12 - 建立面試結果頁
 - Status: Completed
 - Last updated: 2026-05-27
 
@@ -23,7 +23,7 @@
 | 9 | 前端錄音 | Completed |
 | 10 | 回答音檔上傳 API | Completed |
 | 11 | 完成整場面試流程 | Completed |
-| 12 | 面試結果頁 | Not started |
+| 12 | 面試結果頁 | Completed |
 
 ## Step 3 Completion
 
@@ -193,6 +193,24 @@ Verification:
 - `npm run build --prefix frontend` passed.
 - Manual Docker Compose verification confirmed answer rows, uploaded files, and completed interview status.
 
+## Step 12 Completion
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added `/audio/{interview_id}/{question_id}.webm` static audio serving for uploaded local answer files.
+- Replaced the Step 11 result handoff with a full result page.
+- Displayed interview metadata, all questions, answer audio controls, transcript text, and `尚未轉錄` placeholders.
+- Displayed `尚未上傳回答` for questions without answers.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Manual Docker Compose verification confirmed the result page displays uploaded answers and audio controls can load `/audio/...webm`.
+
 ## Backend Logger Maintenance
 
 Completed on 2026-05-27.
@@ -210,11 +228,10 @@ Verification:
 
 ## Next Step
 
-Step 12 - 建立面試結果頁.
+Step 13 - STT mock.
 
 Expected work:
 
-- Load completed interview details on `/interviews/{id}/result`.
-- Display interview metadata, each question, and each uploaded answer.
-- Add playable audio controls after static audio serving or playable URLs are available.
-- Show `transcript_text` or `尚未轉錄`.
+- Add a mock transcription flow that writes test `transcript_text`.
+- Display populated transcript text on the existing result page.
+- Keep real STT provider integration for a later step.

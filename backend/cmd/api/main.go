@@ -45,7 +45,7 @@ func main() {
 	interviewHandler := handler.NewInterviewHandler(interviewService, answerService)
 
 	slog.Info("starting interview-ai backend", "addr", ":8080")
-	if err := http.ListenAndServe(":8080", newRouter(interviewHandler)); err != nil {
+	if err := http.ListenAndServe(":8080", newRouter(interviewHandler, "storage/audio")); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
@@ -83,13 +83,21 @@ func configureLogger(level string) {
 	})))
 }
 
-func newRouter(interviewHandler http.Handler) http.Handler {
+func newRouter(interviewHandler http.Handler, audioDir string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(requestLoggingMiddleware)
 
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	if audioDir != "" {
+		audioFileServer := http.StripPrefix("/audio/", http.FileServer(http.Dir(audioDir)))
+		router.Get("/audio/*", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "audio/webm")
+			audioFileServer.ServeHTTP(w, r)
+		})
+	}
 
 	if interviewHandler != nil {
 		router.Mount("/api/interviews", interviewHandler)

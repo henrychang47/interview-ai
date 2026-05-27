@@ -184,3 +184,24 @@ curl -X POST \
   -F "audio=@answer.webm;type=audio/webm" \
   http://localhost:8080/api/interviews/{interview_id}/questions/{question_id}/answer
 ```
+
+## Get Answer Audio
+
+```http
+GET /audio/{interview_id}/{question_id}.webm
+```
+
+Success response:
+
+```http
+200 OK
+Content-Type: audio/webm
+```
+
+The response body is the uploaded WebM audio bytes saved by `POST /api/interviews/{interview_id}/questions/{question_id}/answer`.
+
+Errors:
+
+```http
+404 Not Found
+```
