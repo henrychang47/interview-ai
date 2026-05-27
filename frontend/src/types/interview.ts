@@ -24,6 +24,14 @@ export type Answer = {
   created_at: string
 }
 
+export type UploadAnswerResponse = {
+  id: string
+  interview_id: string
+  question_id: string
+  audio_path: string
+  transcript_text: string | null
+}
+
 export type InterviewDetail = {
   id: string
   job_title: string

@@ -146,6 +146,11 @@ Success response:
 }
 ```
 
+Completion behavior:
+
+- After each successful upload, the backend checks whether every question in the interview has an answer.
+- When all questions have answers, `GET /api/interviews/{interview_id}` returns `"status":"completed"`.
+
 Errors:
 
 ```json

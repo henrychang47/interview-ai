@@ -5,6 +5,7 @@ import "time"
 const (
 	InterviewStatusCreated        = "created"
 	InterviewStatusQuestionsReady = "questions_ready"
+	InterviewStatusCompleted      = "completed"
 )
 
 type CreateInterviewRequest struct {

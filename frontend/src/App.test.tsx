@@ -345,7 +345,15 @@ describe('App', () => {
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
           { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -430,7 +438,15 @@ describe('App', () => {
         questions: [
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -464,7 +480,15 @@ describe('App', () => {
         questions: [
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -507,7 +531,15 @@ describe('App', () => {
         questions: [
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -544,7 +576,15 @@ describe('App', () => {
         questions: [
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -609,7 +649,15 @@ describe('App', () => {
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
           { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -699,6 +747,155 @@ describe('App', () => {
     expect(objectURL.revokeObjectURL).toHaveBeenCalledWith('blob:recorded-answer')
   })
 
+  it('shows uploaded answer state when resuming an answered question', async () => {
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go、PostgreSQL、REST API',
+        user_profile: '有 Java 和 Go 學習經驗',
+        question_count: 1,
+        status: 'questions_ready',
+        questions: [
+          { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+        ],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '完成面試' })).toBeEnabled()
+  })
+
+  it('uploads the recorded answer for the current question', async () => {
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 1,
+            status: 'questions_ready',
+            questions: [
+              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+            ],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'answer-1',
+            interview_id: 'interview-123',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+    fireEvent.click(await screen.findByRole('button', { name: '上傳本題回答' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/interviews/interview-123/questions/question-1/answer',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+    )
+    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
+  })
+
+  it('finishes the session after uploading the final answer', async () => {
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 1,
+            status: 'questions_ready',
+            questions: [
+              { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
+            ],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'answer-1',
+            interview_id: 'interview-123',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '完成面試' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '開始錄音' }))
+
+    await waitFor(() => {
+      expect(media.recorders).toHaveLength(1)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+    fireEvent.click(await screen.findByRole('button', { name: '上傳本題回答' }))
+
+    expect(await screen.findByText('本題回答已上傳')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '完成面試' }))
+
+    expect(await screen.findByRole('heading', { name: '面試已完成' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/interviews/interview-123/result')
+  })
+
   it('moves between session questions with previous and next buttons', async () => {
     mockPathname('/interviews/interview-123/session')
     vi.stubGlobal(
@@ -714,7 +911,15 @@ describe('App', () => {
           { id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' },
           { id: 'question-2', order: 2, text: '你如何設計一個 REST API？' },
         ],
-        answers: [],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
       }),
     )
 
@@ -729,7 +934,7 @@ describe('App', () => {
     expect(screen.getByText('第 2 題 / 共 2 題')).toBeInTheDocument()
     expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '上一題' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '下一題' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '完成面試' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: '上一題' }))
 

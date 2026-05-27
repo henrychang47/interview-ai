@@ -61,6 +61,32 @@ func TestUploadAnswerSavesAudioAndPersistsAnswer(t *testing.T) {
 	}
 }
 
+func TestUploadAnswerCompletesInterviewAfterSavingAnswer(t *testing.T) {
+	repository := &stubAnswerRepository{
+		answer: model.Answer{
+			ID:          "answer-id",
+			InterviewID: "interview-id",
+			QuestionID:  "question-id",
+			AudioPath:   stringPointer("storage/audio/interview-id/question-id.webm"),
+		},
+	}
+	service := NewAnswerService(&stubAudioStorage{}, repository)
+
+	_, err := service.UploadAnswer(context.Background(), UploadAnswerInput{
+		InterviewID: "interview-id",
+		QuestionID:  "question-id",
+		ContentType: "audio/webm",
+		Audio:       strings.NewReader("webm-bytes"),
+	})
+
+	if err != nil {
+		t.Fatalf("UploadAnswer returned error: %v", err)
+	}
+	if repository.completeInterviewID != "interview-id" {
+		t.Fatalf("expected completion check for interview-id, got %q", repository.completeInterviewID)
+	}
+}
+
 func TestUploadAnswerRequiresAudio(t *testing.T) {
 	service := NewAnswerService(&stubAudioStorage{}, &stubAnswerRepository{})
 
@@ -91,7 +117,8 @@ func TestUploadAnswerRejectsUnsupportedAudioType(t *testing.T) {
 }
 
 func TestUploadAnswerWrapsStorageFailure(t *testing.T) {
-	service := NewAnswerService(&stubAudioStorage{err: errors.New("disk full")}, &stubAnswerRepository{})
+	repository := &stubAnswerRepository{}
+	service := NewAnswerService(&stubAudioStorage{err: errors.New("disk full")}, repository)
 
 	_, err := service.UploadAnswer(context.Background(), UploadAnswerInput{
 		InterviewID: "interview-id",
@@ -102,6 +129,9 @@ func TestUploadAnswerWrapsStorageFailure(t *testing.T) {
 
 	if !errors.Is(err, ErrSaveAnswerAudioFailed) {
 		t.Fatalf("expected ErrSaveAnswerAudioFailed, got %v", err)
+	}
+	if repository.completeInterviewID != "" {
+		t.Fatalf("expected completion check to be skipped, got %q", repository.completeInterviewID)
 	}
 }
 
@@ -126,7 +156,8 @@ func TestUploadAnswerValidatesQuestionBeforeSavingAudio(t *testing.T) {
 
 func TestUploadAnswerPropagatesRepositoryFailure(t *testing.T) {
 	expectedErr := errors.New("database unavailable")
-	service := NewAnswerService(&stubAudioStorage{}, &stubAnswerRepository{err: expectedErr})
+	repository := &stubAnswerRepository{err: expectedErr}
+	service := NewAnswerService(&stubAudioStorage{}, repository)
 
 	_, err := service.UploadAnswer(context.Background(), UploadAnswerInput{
 		InterviewID: "interview-id",
@@ -137,6 +168,9 @@ func TestUploadAnswerPropagatesRepositoryFailure(t *testing.T) {
 
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected repository error, got %v", err)
+	}
+	if repository.completeInterviewID != "" {
+		t.Fatalf("expected completion check to be skipped, got %q", repository.completeInterviewID)
 	}
 }
 
@@ -168,10 +202,12 @@ func (s *stubAudioStorage) SaveAnswerAudio(ctx context.Context, interviewID stri
 }
 
 type stubAnswerRepository struct {
-	audioPath   string
-	answer      model.Answer
-	validateErr error
-	err         error
+	audioPath           string
+	answer              model.Answer
+	validateErr         error
+	err                 error
+	completeInterviewID string
+	completeErr         error
 }
 
 func (r *stubAnswerRepository) EnsureQuestionForInterview(ctx context.Context, interviewID string, questionID string) error {
@@ -184,6 +220,11 @@ func (r *stubAnswerRepository) UpsertAnswer(ctx context.Context, interviewID str
 		return model.Answer{}, r.err
 	}
 	return r.answer, nil
+}
+
+func (r *stubAnswerRepository) CompleteInterviewIfAllQuestionsAnswered(ctx context.Context, interviewID string) error {
+	r.completeInterviewID = interviewID
+	return r.completeErr
 }
 
 func stringPointer(value string) *string {

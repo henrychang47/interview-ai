@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { getInterview } from '../api/interviews'
-import type { InterviewDetail } from '../types/interview'
+import { getInterview, uploadAnswerAudio } from '../api/interviews'
+import type { Answer, InterviewDetail } from '../types/interview'
 
 type InterviewSessionPageProps = {
   interviewID: string
@@ -34,7 +34,13 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const [error, setError] = useState<string | null>(null)
   const [isPlayingQuestion, setIsPlayingQuestion] = useState(false)
   const [isRecordingAnswer, setIsRecordingAnswer] = useState(false)
+  const [recordedAnswerBlob, setRecordedAnswerBlob] = useState<Blob | null>(null)
   const [recordedAnswerURL, setRecordedAnswerURL] = useState<string | null>(null)
+  const [uploadedAnswersByQuestionID, setUploadedAnswersByQuestionID] = useState<
+    Record<string, Answer>
+  >({})
+  const [isUploadingAnswer, setIsUploadingAnswer] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [recordingError, setRecordingError] = useState<string | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -52,7 +58,16 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
       try {
         const detail = await getInterview(interviewID)
         if (isMounted) {
+          const uploadedAnswers = detail.answers.reduce<Record<string, Answer>>(
+            (answersByQuestionID, answer) => {
+              answersByQuestionID[answer.question_id] = answer
+              return answersByQuestionID
+            },
+            {},
+          )
+
           setInterview(detail)
+          setUploadedAnswersByQuestionID(uploadedAnswers)
           setCurrentQuestionIndex(0)
         }
       } catch (error) {
@@ -77,6 +92,11 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const currentQuestion = questions[currentQuestionIndex]
   const isFirstQuestion = currentQuestionIndex === 0
   const isLastQuestion = currentQuestionIndex === questions.length - 1
+  const currentUploadedAnswer = currentQuestion
+    ? uploadedAnswersByQuestionID[currentQuestion.id]
+    : undefined
+  const canUploadCurrentAnswer = Boolean(currentQuestion && recordedAnswerBlob && !isUploadingAnswer)
+  const canMoveToNextQuestion = Boolean(currentQuestion && currentUploadedAnswer && !isUploadingAnswer)
 
   const progressPercent = useMemo(() => {
     if (questions.length === 0) {
@@ -124,6 +144,8 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
       recordedAnswerURLRef.current = null
     }
     setRecordedAnswerURL(null)
+    setRecordedAnswerBlob(null)
+    setUploadError(null)
   }
 
   function revokeRecordedAnswerURLOnUnmount() {
@@ -170,7 +192,9 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           const recordedBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
           const recordedURL = URL.createObjectURL(recordedBlob)
           recordedAnswerURLRef.current = recordedURL
+          setRecordedAnswerBlob(recordedBlob)
           setRecordedAnswerURL(recordedURL)
+          setUploadError(null)
         }
         setIsRecordingAnswer(false)
         stopMediaStream()
@@ -183,6 +207,33 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
       setIsRecordingAnswer(false)
       stopMediaStream()
       setRecordingError(getRecordingErrorMessage(error))
+    }
+  }
+
+  async function uploadCurrentAnswer() {
+    if (!currentQuestion || !recordedAnswerBlob || isUploadingAnswer) {
+      return
+    }
+
+    setIsUploadingAnswer(true)
+    setUploadError(null)
+
+    try {
+      const uploadedAnswer = await uploadAnswerAudio(interviewID, currentQuestion.id, recordedAnswerBlob)
+      setUploadedAnswersByQuestionID((answersByQuestionID) => ({
+        ...answersByQuestionID,
+        [uploadedAnswer.question_id]: {
+          id: uploadedAnswer.id,
+          question_id: uploadedAnswer.question_id,
+          audio_path: uploadedAnswer.audio_path,
+          transcript_text: uploadedAnswer.transcript_text,
+          created_at: new Date().toISOString(),
+        },
+      }))
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : '上傳回答失敗')
+    } finally {
+      setIsUploadingAnswer(false)
     }
   }
 
@@ -332,6 +383,22 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                       <audio aria-label="回答錄音預覽" controls src={recordedAnswerURL} />
                     </div>
                   ) : null}
+                  {recordedAnswerURL ? (
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        onClick={uploadCurrentAnswer}
+                        disabled={!canUploadCurrentAnswer || Boolean(currentUploadedAnswer)}
+                        className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isUploadingAnswer ? '上傳中' : '上傳本題回答'}
+                      </button>
+                    </div>
+                  ) : null}
+                  {currentUploadedAnswer ? (
+                    <p className="mt-3 text-sm font-medium text-teal-700">本題回答已上傳</p>
+                  ) : null}
+                  {uploadError ? <p className="mt-3 text-sm text-red-700">{uploadError}</p> : null}
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
@@ -350,14 +417,22 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
                   <button
                     type="button"
                     onClick={() => {
+                      if (!canMoveToNextQuestion) {
+                        return
+                      }
                       stopQuestionPlayback()
                       resetAnswerRecording()
+                      if (isLastQuestion) {
+                        window.history.pushState({}, '', `/interviews/${interviewID}/result`)
+                        window.dispatchEvent(new PopStateEvent('popstate'))
+                        return
+                      }
                       setCurrentQuestionIndex((index) => Math.min(index + 1, questions.length - 1))
                     }}
-                    disabled={isLastQuestion}
+                    disabled={!canMoveToNextQuestion}
                     className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    下一題
+                    {isLastQuestion ? '完成面試' : '下一題'}
                   </button>
                 </div>
               </section>

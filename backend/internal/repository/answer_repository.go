@@ -74,3 +74,26 @@ func (r *AnswerRepository) UpsertAnswer(ctx context.Context, interviewID string,
 
 	return answer, nil
 }
+
+func (r *AnswerRepository) CompleteInterviewIfAllQuestionsAnswered(ctx context.Context, interviewID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE interviews
+		SET status = $2, updated_at = now()
+		WHERE id = $1
+		  AND (
+			SELECT count(*)
+			FROM questions
+			WHERE interview_id = $1
+		  ) > 0
+		  AND (
+			SELECT count(DISTINCT question_id)
+			FROM answers
+			WHERE interview_id = $1
+		  ) = (
+			SELECT count(*)
+			FROM questions
+			WHERE interview_id = $1
+		  )
+	`, interviewID, model.InterviewStatusCompleted)
+	return err
+}

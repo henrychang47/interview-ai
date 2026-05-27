@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"testing"
 
 	"interview-ai/backend/internal/llm"
@@ -24,7 +25,9 @@ func TestUpsertAnswerCreatesAndUpdatesAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect database: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(func() {
+		pool.Close()
+	})
 
 	interviewRepository := NewInterviewRepository(pool)
 	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
@@ -105,7 +108,9 @@ func TestUpsertAnswerRejectsMissingInterview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect database: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(func() {
+		pool.Close()
+	})
 
 	repository := NewAnswerRepository(pool)
 	_, err = repository.UpsertAnswer(ctx, "00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", "storage/audio/missing.webm")
@@ -126,7 +131,9 @@ func TestUpsertAnswerRejectsQuestionOutsideInterview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect database: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(func() {
+		pool.Close()
+	})
 
 	interviewRepository := NewInterviewRepository(pool)
 	first, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
@@ -166,5 +173,148 @@ func TestUpsertAnswerRejectsQuestionOutsideInterview(t *testing.T) {
 
 	if !errors.Is(err, service.ErrQuestionNotFoundForInterview) {
 		t.Fatalf("expected ErrQuestionNotFoundForInterview, got %v", err)
+	}
+}
+
+func TestCompleteInterviewIfAllQuestionsAnsweredKeepsInterviewOpenBeforeFinalAnswer(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	interviewRepository := NewInterviewRepository(pool)
+	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  2,
+	}, []llm.GeneratedQuestion{
+		{Order: 1, Text: "第一題"},
+		{Order: 2, Text: "第二題"},
+	})
+	if err != nil {
+		t.Fatalf("CreateWithQuestions returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
+	})
+
+	var firstQuestionID string
+	if err := pool.QueryRow(ctx, `
+		SELECT id
+		FROM questions
+		WHERE interview_id = $1 AND question_order = 1
+	`, created.ID).Scan(&firstQuestionID); err != nil {
+		t.Fatalf("query first question id: %v", err)
+	}
+
+	repository := NewAnswerRepository(pool)
+	if _, err := repository.UpsertAnswer(ctx, created.ID, firstQuestionID, "storage/audio/first.webm"); err != nil {
+		t.Fatalf("UpsertAnswer returned error: %v", err)
+	}
+	if err := repository.CompleteInterviewIfAllQuestionsAnswered(ctx, created.ID); err != nil {
+		t.Fatalf("CompleteInterviewIfAllQuestionsAnswered returned error: %v", err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx, `
+		SELECT status
+		FROM interviews
+		WHERE id = $1
+	`, created.ID).Scan(&status); err != nil {
+		t.Fatalf("query interview status: %v", err)
+	}
+	if status != model.InterviewStatusQuestionsReady {
+		t.Fatalf("expected status %q, got %q", model.InterviewStatusQuestionsReady, status)
+	}
+}
+
+func TestCompleteInterviewIfAllQuestionsAnsweredMarksInterviewCompleted(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	interviewRepository := NewInterviewRepository(pool)
+	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  2,
+	}, []llm.GeneratedQuestion{
+		{Order: 1, Text: "第一題"},
+		{Order: 2, Text: "第二題"},
+	})
+	if err != nil {
+		t.Fatalf("CreateWithQuestions returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
+	})
+
+	rows, err := pool.Query(ctx, `
+		SELECT id
+		FROM questions
+		WHERE interview_id = $1
+		ORDER BY question_order
+	`, created.ID)
+	if err != nil {
+		t.Fatalf("query questions: %v", err)
+	}
+	defer rows.Close()
+
+	questionIDs := make([]string, 0, 2)
+	for rows.Next() {
+		var questionID string
+		if err := rows.Scan(&questionID); err != nil {
+			t.Fatalf("scan question id: %v", err)
+		}
+		questionIDs = append(questionIDs, questionID)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate questions: %v", err)
+	}
+	if len(questionIDs) != 2 {
+		t.Fatalf("expected 2 questions, got %d", len(questionIDs))
+	}
+
+	repository := NewAnswerRepository(pool)
+	for index, questionID := range questionIDs {
+		if _, err := repository.UpsertAnswer(ctx, created.ID, questionID, "storage/audio/answer-"+strconv.Itoa(index+1)+".webm"); err != nil {
+			t.Fatalf("UpsertAnswer question %d returned error: %v", index+1, err)
+		}
+	}
+	if err := repository.CompleteInterviewIfAllQuestionsAnswered(ctx, created.ID); err != nil {
+		t.Fatalf("CompleteInterviewIfAllQuestionsAnswered returned error: %v", err)
+	}
+
+	var status string
+	if err := pool.QueryRow(ctx, `
+		SELECT status
+		FROM interviews
+		WHERE id = $1
+	`, created.ID).Scan(&status); err != nil {
+		t.Fatalf("query interview status: %v", err)
+	}
+	if status != model.InterviewStatusCompleted {
+		t.Fatalf("expected status %q, got %q", model.InterviewStatusCompleted, status)
 	}
 }

@@ -4,7 +4,7 @@
 
 ## Current Status
 
-- Current step: Step 10 - 回答音檔上傳 API
+- Current step: Step 11 - 完成整場面試流程
 - Status: Completed
 - Last updated: 2026-05-27
 
@@ -22,7 +22,7 @@
 | 8 | TTS 朗讀題目 | Completed | 瀏覽器可朗讀目前題目 |
 | 9 | 前端錄音 | Completed | 使用者可錄音並回放 |
 | 10 | 回答音檔上傳 API | Completed | 後端可保存音檔並建立 answer |
-| 11 | 完成整場面試流程 | Not started | 每題都有 answer，interview status 變成 completed |
+| 11 | 完成整場面試流程 | Completed | 每題都有 answer，interview status 變成 completed |
 | 12 | 面試結果頁 | Not started | 可查看題目與回答音檔 |
 
 ## Completed Work
@@ -225,13 +225,33 @@ Verification:
 - Repository integration tests passed with `DATABASE_URL` configured.
 - Manual API verification uploaded `answer.webm`, confirmed the file in local storage, and confirmed the answer through `GET /api/interviews/{id}`.
 
+### Step 11 - 完成整場面試流程
+
+Completed on 2026-05-27.
+
+Implemented:
+
+- Added frontend answer upload from recorded `audio/webm` blobs.
+- Tracked uploaded answers by question id in the session page.
+- Required the current answer to be uploaded before moving forward or finishing.
+- Marked interviews `completed` after all questions have answers.
+- Added a minimal `/interviews/{id}/result` completion handoff route for Step 12.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- Repository integration tests passed with `DATABASE_URL` configured.
+- `npm test --prefix frontend` passed.
+- `npm run build --prefix frontend` passed.
+- Manual Docker Compose verification confirmed answer rows, uploaded files, and completed interview status.
+
 ## Next Step
 
-Step 11 - 完成整場面試流程.
+Step 12 - 建立面試結果頁.
 
 Expected work:
 
-- Add frontend upload action after recording.
-- Track uploaded answers per question.
-- Move through all questions and finish the session flow.
-- Update interview status to completed when all questions have answers.
+- Load completed interview details on `/interviews/{id}/result`.
+- Display interview metadata, each question, and each uploaded answer.
+- Add playable audio controls after static audio serving or playable URLs are available.
+- Show `transcript_text` or `尚未轉錄`.

@@ -22,6 +22,7 @@ type AudioStorage interface {
 type AnswerRepository interface {
 	EnsureQuestionForInterview(ctx context.Context, interviewID string, questionID string) error
 	UpsertAnswer(ctx context.Context, interviewID string, questionID string, audioPath string) (model.Answer, error)
+	CompleteInterviewIfAllQuestionsAnswered(ctx context.Context, interviewID string) error
 }
 
 type UploadAnswerInput struct {
@@ -59,6 +60,10 @@ func (s *AnswerService) UploadAnswer(ctx context.Context, input UploadAnswerInpu
 
 	answer, err := s.repository.UpsertAnswer(ctx, input.InterviewID, input.QuestionID, audioPath)
 	if err != nil {
+		return model.UploadAnswerResponse{}, err
+	}
+
+	if err := s.repository.CompleteInterviewIfAllQuestionsAnswered(ctx, input.InterviewID); err != nil {
 		return model.UploadAnswerResponse{}, err
 	}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import InterviewDetailPage from './pages/InterviewDetailPage'
 import InterviewSessionPage from './pages/InterviewSessionPage'
@@ -16,6 +16,11 @@ function getRoute(pathname: string) {
     return { name: 'session' as const, interviewID: decodeURIComponent(sessionMatch[1]) }
   }
 
+  const resultMatch = pathname.match(/^\/interviews\/([^/]+)\/result$/)
+  if (resultMatch) {
+    return { name: 'result' as const, interviewID: decodeURIComponent(resultMatch[1]) }
+  }
+
   const detailMatch = pathname.match(/^\/interviews\/([^/]+)$/)
   if (detailMatch) {
     return { name: 'detail' as const, interviewID: decodeURIComponent(detailMatch[1]) }
@@ -26,6 +31,15 @@ function getRoute(pathname: string) {
 
 export default function App() {
   const [route, setRoute] = useState(() => getRoute(window.location.pathname))
+
+  useEffect(() => {
+    function handlePopState() {
+      setRoute(getRoute(window.location.pathname))
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   function navigate(path: string) {
     window.history.pushState({}, '', path)
@@ -38,6 +52,28 @@ export default function App() {
 
   if (route.name === 'session') {
     return <InterviewSessionPage interviewID={route.interviewID} />
+  }
+
+  if (route.name === 'result') {
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-950">
+        <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-6 py-12">
+          <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
+            Interview Complete
+          </p>
+          <h1 className="mt-4 text-4xl font-bold leading-tight">面試已完成</h1>
+          <p className="mt-5 text-lg leading-8 text-slate-700">
+            結果頁將在下一步顯示題目與回答音檔。
+          </p>
+          <a
+            href={`/interviews/${route.interviewID}`}
+            className="mt-8 inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+          >
+            返回面試詳情
+          </a>
+        </section>
+      </main>
+    )
   }
 
   if (route.name === 'detail') {
