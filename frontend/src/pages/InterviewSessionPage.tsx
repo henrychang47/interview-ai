@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview, uploadAnswerAudio } from '../api/interviews'
+import { Button, Card, Icon, StatusBadge } from '../components/ui'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewSessionPageProps = {
@@ -334,149 +335,173 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   }, [stopMediaStream, stopQuestionPlayback])
 
   const failedUpload = uploadQueue.find((item) => item.status === 'failed')
+  const phaseLabel =
+    phase === 'playing_question'
+      ? '正在播放題目'
+      : phase === 'recording_answer'
+        ? '正在錄音'
+        : phase === 'advancing'
+          ? '準備下一題'
+          : phase === 'finishing_uploads'
+            ? '正在完成面試'
+            : phase === 'blocked'
+              ? '面試暫停'
+              : '載入面試中...'
+  const minutes = Math.floor(secondsRemaining / 60)
+  const seconds = secondsRemaining % 60
+  const timerLabel = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <section className="mx-auto w-full max-w-4xl px-6 py-10">
-        <a
-          href={`/interviews/${interviewID}`}
-          className="text-sm font-medium text-teal-700 hover:text-teal-800"
-        >
-          返回面試詳情
-        </a>
+    <main className="flex min-h-screen flex-col bg-surface text-on-surface">
+      <header className="border-b border-outline-variant bg-surface px-margin-mobile py-md md:px-margin-desktop md:py-lg">
+        <div className="mx-auto flex w-full max-w-container-max items-center justify-between gap-md">
+          <div className="min-w-0">
+            <h1 className="truncate font-headline text-headline-sm text-on-surface md:text-headline-md">
+              {interview?.job_title ?? '模擬面試進行中'}
+            </h1>
+            {currentQuestion ? (
+              <p className="mt-xs text-body-sm text-on-surface-variant">
+                Question {currentQuestionIndex + 1} of {questions.length}
+              </p>
+            ) : null}
+          </div>
+          <a
+            href={`/interviews/${interviewID}`}
+            className="flex shrink-0 items-center gap-xs rounded-lg px-sm py-xs text-label-md font-bold text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+          >
+            <Icon name="close" />
+            <span className="hidden md:inline">結束面試</span>
+          </a>
+        </div>
+        <div className="mx-auto mt-sm w-full max-w-container-max">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      </header>
 
-        {phase === 'loading' ? <p className="mt-8 text-slate-600">載入面試中...</p> : null}
+      <section className="relative flex flex-1 flex-col items-center justify-center px-margin-mobile py-xl md:px-margin-desktop">
+        {phase === 'loading' ? <p className="text-body-md text-on-surface-variant">載入面試中...</p> : null}
 
         {error ? (
-          <div className="mt-8 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <Card className="mb-lg flex w-full max-w-2xl items-start gap-sm border-error/20 bg-error-container p-md text-on-error-container">
+            <Icon name="warning" className="mt-xs" />
+            <p className="text-body-sm">{error}</p>
+          </Card>
         ) : null}
 
         {interview ? (
-          <div className="mt-8">
-            <div className="border-b border-slate-200 pb-6">
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
-                Interview Session
-              </p>
-              <h1 className="mt-3 text-3xl font-bold leading-tight">模擬面試進行中</h1>
-              <p className="mt-3 text-lg font-medium text-slate-800">{interview.job_title}</p>
-            </div>
-
+          <>
             {currentQuestion ? (
-              <section className="mt-8">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-teal-700">
-                    第 {currentQuestionIndex + 1} 題 / 共 {questions.length} 題
-                  </p>
-                  <p className="text-sm text-slate-600">問題 {currentQuestion.order}</p>
-                </div>
-
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-teal-700"
-                    style={{ width: `${progressPercent}%` }}
+              <div className="flex w-full max-w-3xl flex-col items-center text-center">
+                <StatusBadge tone={phase === 'recording_answer' ? 'primary' : 'neutral'} className="mb-lg">
+                  <Icon
+                    name={phase === 'recording_answer' ? 'mic' : phase === 'playing_question' ? 'volume_up' : 'hourglass_empty'}
+                    filled={phase === 'recording_answer'}
                   />
+                  {phaseLabel}
+                </StatusBadge>
+
+                <div className="mb-xl">
+                  <div className="font-headline text-headline-xl text-on-surface md:text-[64px] md:leading-[72px]">
+                    {phase === 'recording_answer' ? timerLabel : `Q${currentQuestion.order}`}
+                  </div>
+                  <p className="mt-xs text-body-sm text-on-surface-variant">
+                    {phase === 'recording_answer' ? '剩餘時間' : `第 ${currentQuestionIndex + 1} 題 / 共 ${questions.length} 題`}
+                  </p>
                 </div>
 
-                <div className="mt-8 rounded-md border border-slate-200 bg-white p-6">
-                  {phase === 'playing_question' ? (
-                    <h2 className="text-xl font-semibold text-slate-900">正在播放題目</h2>
-                  ) : null}
-                  {phase === 'recording_answer' ? (
-                    <>
-                      <h2 className="text-xl font-semibold text-slate-900">正在錄音</h2>
-                      <p className="mt-2 text-sm text-slate-600">
-                        剩餘 {secondsRemaining} 秒
-                      </p>
-                    </>
-                  ) : null}
-                  {phase === 'advancing' ? (
-                    <h2 className="text-xl font-semibold text-slate-900">準備下一題</h2>
-                  ) : null}
-                  {phase === 'finishing_uploads' ? (
-                    <h2 className="text-xl font-semibold text-slate-900">正在完成面試</h2>
-                  ) : null}
-                  {phase === 'blocked' && !error ? (
-                    <h2 className="text-xl font-semibold text-slate-900">面試暫停</h2>
-                  ) : null}
-
-                  {recordingError ? (
-                    <p className="mt-3 text-sm text-red-700">{recordingError}</p>
-                  ) : null}
-                  {!canSpeakQuestion ? (
-                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援題目朗讀。</p>
-                  ) : null}
-                  {!canRecordAnswer ? (
-                    <p className="mt-3 text-sm text-slate-600">此瀏覽器不支援錄音。</p>
-                  ) : null}
-                  {failedUpload ? (
-                    <p className="mt-3 text-sm text-red-700">{failedUpload.error}</p>
-                  ) : null}
-                </div>
-
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <button
+                <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-md md:flex-row">
+                  <Button
                     type="button"
+                    icon="stop_circle"
                     onClick={() => stopAnswerRecording({ discard: false })}
                     disabled={phase !== 'recording_answer'}
-                    className="min-h-11 rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full md:w-auto"
                   >
                     回答結束
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    tone="secondary"
+                    icon="restart_alt"
                     onClick={() => stopAnswerRecording({ discard: true })}
                     disabled={phase !== 'recording_answer'}
-                    className="min-h-11 rounded-md border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full md:w-auto"
                   >
                     重新播放題目
-                  </button>
+                  </Button>
+                </div>
+
+                <div className="mt-lg w-full max-w-2xl space-y-sm text-left">
+                  {recordingError ? (
+                    <Card className="border-error/20 bg-error-container p-md text-body-sm text-on-error-container">
+                      {recordingError}
+                    </Card>
+                  ) : null}
+                  {!canSpeakQuestion ? (
+                    <Card className="p-md text-body-sm text-on-surface-variant">
+                      此瀏覽器不支援題目朗讀。
+                    </Card>
+                  ) : null}
+                  {!canRecordAnswer ? (
+                    <Card className="p-md text-body-sm text-on-surface-variant">
+                      此瀏覽器不支援錄音。
+                    </Card>
+                  ) : null}
                   {failedUpload ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setUploadQueue((items) =>
-                            items.map((item) =>
-                              item.status === 'failed'
-                                ? { ...item, status: 'queued', error: null }
-                                : item,
-                            ),
-                          )
-                        }
-                        className="min-h-11 rounded-md border border-teal-700 px-5 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50"
-                      >
-                        重試上傳
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const questionIndex = questions.findIndex(
-                            (question) => question.id === failedUpload.questionID,
-                          )
-                          if (questionIndex >= 0) {
-                            setCurrentQuestionIndex(questionIndex)
-                            setUploadQueue((items) =>
-                              items.filter((item) => item.questionID !== failedUpload.questionID),
-                            )
-                            setPhase('playing_question')
-                          }
-                        }}
-                        className="min-h-11 rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100"
-                      >
-                        重新回答本題
-                      </button>
-                    </>
+                    <Card className="border-error/20 bg-error-container p-md text-on-error-container">
+                      <div className="flex flex-col gap-md md:flex-row md:items-center md:justify-between">
+                        <p className="text-body-sm">{failedUpload.error}</p>
+                        <div className="flex flex-wrap gap-sm">
+                          <Button
+                            type="button"
+                            tone="danger"
+                            onClick={() =>
+                              setUploadQueue((items) =>
+                                items.map((item) =>
+                                  item.status === 'failed'
+                                    ? { ...item, status: 'queued', error: null }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            重試上傳
+                          </Button>
+                          <Button
+                            type="button"
+                            tone="secondary"
+                            onClick={() => {
+                              const questionIndex = questions.findIndex(
+                                (question) => question.id === failedUpload.questionID,
+                              )
+                              if (questionIndex >= 0) {
+                                setCurrentQuestionIndex(questionIndex)
+                                setUploadQueue((items) =>
+                                  items.filter((item) => item.questionID !== failedUpload.questionID),
+                                )
+                                setPhase('playing_question')
+                              }
+                            }}
+                          >
+                            重新回答本題
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
                   ) : null}
                 </div>
-              </section>
-            ) : (
-              <div className="mt-8 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                這場面試目前沒有題目。
               </div>
+            ) : (
+              <Card className="w-full max-w-2xl border-amber-200 bg-amber-50 p-md text-body-sm text-amber-800">
+                這場面試目前沒有題目。
+              </Card>
             )}
-          </div>
+          </>
         ) : null}
       </section>
     </main>

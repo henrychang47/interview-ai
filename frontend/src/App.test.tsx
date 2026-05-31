@@ -136,8 +136,15 @@ describe('App', () => {
   it('renders the interview practice homepage', () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: '模擬面試應用' })).toBeInTheDocument()
-    expect(screen.getByText('建立面試、產生題目、錄音回答，逐步打通 MVP 主流程。')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Mock Interview' })).toHaveAttribute('href', '/')
+    expect(
+      screen.getByRole('heading', {
+        name: '提升您的面試表現，隨時隨地與 AI 導師練習',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('四個步驟，完成從題目生成到錄音回顧的模擬面試流程。'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '建立新的模擬面試' })).toHaveAttribute(
       'href',
       '/interviews/new',
@@ -149,12 +156,37 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: '建立模擬面試' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Mock Interview' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: '返回首頁' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('heading', { name: '建立新面試' })).toBeInTheDocument()
     expect(screen.getByLabelText('職位名稱')).toBeInTheDocument()
     expect(screen.getByLabelText('職位要求及說明')).toBeInTheDocument()
     expect(screen.getByLabelText('個人資訊')).toBeInTheDocument()
     expect(screen.queryByLabelText('題目數量')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '下一步' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+  })
+
+  it('requires all profile fields before moving to setup', () => {
+    mockPathname('/interviews/new')
+
+    render(<App />)
+
+    const nextButton = screen.getByRole('button', { name: '下一步' })
+    expect(nextButton).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('職位名稱'), { target: { value: '後端工程師' } })
+    fireEvent.change(screen.getByLabelText('職位要求及說明'), {
+      target: { value: '需要熟悉 Go、PostgreSQL、REST API' },
+    })
+    expect(nextButton).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('個人資訊'), {
+      target: { value: '有 Java 和 Go 學習經驗' },
+    })
+
+    expect(nextButton).toBeEnabled()
+    fireEvent.click(nextButton)
+    expect(screen.getByLabelText('題目數量')).toBeInTheDocument()
   })
 
   it('submits the two-stage create interview form after microphone test', async () => {
@@ -204,6 +236,28 @@ describe('App', () => {
     expect(pushState).toHaveBeenCalledWith({}, '', '/interviews/interview-123')
   })
 
+  it('returns to the profile step from the setup step', async () => {
+    mockPathname('/interviews/new')
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('職位名稱'), { target: { value: '後端工程師' } })
+    fireEvent.change(screen.getByLabelText('職位要求及說明'), {
+      target: { value: '需要熟悉 Go、PostgreSQL、REST API' },
+    })
+    fireEvent.change(screen.getByLabelText('個人資訊'), {
+      target: { value: '有 Java 和 Go 學習經驗' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(await screen.findByLabelText('題目數量')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '上一步' }))
+
+    expect(screen.getByLabelText('職位名稱')).toHaveValue('後端工程師')
+    expect(screen.queryByLabelText('題目數量')).not.toBeInTheDocument()
+  })
+
   it('shows an API error when create interview fails', async () => {
     installMediaRecorderMock()
     mockPathname('/interviews/new')
@@ -211,6 +265,13 @@ describe('App', () => {
 
     render(<App />)
 
+    fireEvent.change(screen.getByLabelText('職位名稱'), { target: { value: '後端工程師' } })
+    fireEvent.change(screen.getByLabelText('職位要求及說明'), {
+      target: { value: '需要熟悉 Go' },
+    })
+    fireEvent.change(screen.getByLabelText('個人資訊'), {
+      target: { value: '有 Go 學習經驗' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     fireEvent.click(await screen.findByRole('button', { name: '測試麥克風' }))
     expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()

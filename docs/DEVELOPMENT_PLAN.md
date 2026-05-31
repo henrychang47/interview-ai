@@ -272,6 +272,24 @@ Verification:
 - `go test ./internal/llm` passed in `backend`.
 - `go test ./...` passed in `backend`.
 
+## Frontend Design Refresh
+
+Completed on 2026-05-31.
+
+Implemented:
+
+- Applied the `frontend/DESIGN.md` Calm Interviewer visual system to the React frontend.
+- Added Tailwind design tokens, Google font and Material Symbols links, and shared UI primitives for cards, buttons, badges, icons, shell layout, and setup progress.
+- Restyled the homepage, interview setup, preparation/detail, session, and result pages using the static `frontend/design/` pages as visual references.
+- Extracted the homepage into its own page component and shared the standard topbar across non-session pages.
+- Kept MVP scope unchanged by omitting non-MVP history, export, AI feedback, scoring, and account features.
+- Preserved existing routes, API contracts, microphone test, TTS, recording, upload queue, retry, and result audio playback behavior.
+
+Verification:
+
+- `npm test` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
 ## Next Step
 
 Post-MVP / Phase 2: Step 13 - STT mock.

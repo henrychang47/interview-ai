@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { getInterview, startInterview } from '../api/interviews'
+import { Button, Card, Icon, LinkButton, PageShell, StatusBadge, TopBar } from '../components/ui'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewDetailPageProps = {
@@ -64,85 +65,111 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <section className="mx-auto w-full max-w-4xl px-6 py-10">
-        <a href="/interviews/new" className="text-sm font-medium text-teal-700 hover:text-teal-800">
-          建立另一場面試
-        </a>
-
-        {isLoading ? <p className="mt-8 text-slate-600">載入面試中...</p> : null}
-
-        {error ? (
-          <div className="mt-8 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+    <>
+      <TopBar
+        action={{ href: '/interviews/new', label: '建立另一場面試', icon: 'add_circle' }}
+      />
+      <PageShell maxWidth="max-w-container-max">
+      {isLoading ? (
+        <Card className="flex min-h-[45vh] flex-col items-center justify-center p-xl text-center">
+          <div className="relative mb-lg h-16 w-16">
+            <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+            <div className="absolute inset-0 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
-        ) : null}
+          <p className="text-body-md text-on-surface-variant">載入面試中...</p>
+        </Card>
+      ) : null}
 
-        {interview ? (
-          <div className="mt-8">
-            <div className="flex flex-col gap-3 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
-                  Interview Detail
-                </p>
-                <h1 className="mt-3 text-3xl font-bold leading-tight">{interview.job_title}</h1>
-                <p className="mt-3 max-w-2xl text-slate-700">{interview.job_description}</p>
-              </div>
-              <span className="inline-flex w-fit rounded-md border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
-                {interview.status}
-              </span>
+      {error ? (
+        <Card className="mb-lg flex items-start gap-sm border-error/20 bg-error-container p-md text-on-error-container">
+          <Icon name="warning" className="mt-xs" />
+          <p className="text-body-sm">{error}</p>
+        </Card>
+      ) : null}
+
+      {interview ? (
+        <div>
+          <div className="mb-lg flex flex-col gap-md md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-label-md font-bold uppercase text-primary">Interview Detail</p>
+              <h1 className="mt-sm font-headline text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
+                {interview.job_title}
+              </h1>
+              <p className="mt-sm max-w-3xl text-body-md text-on-surface-variant">
+                {interview.job_description}
+              </p>
             </div>
-
-            <section className="mt-8 space-y-4">
-              {interview.status === 'generating_questions' ? (
-                <h2 className="text-xl font-semibold text-slate-900">題目準備中</h2>
-              ) : null}
-
-              {interview.status === 'questions_ready' ? (
-                <>
-                  <h2 className="text-xl font-semibold text-slate-900">題目已準備完成</h2>
-                  <button
-                    type="button"
-                    onClick={handleStartInterview}
-                    disabled={isStarting}
-                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  >
-                    {isStarting ? '開始中...' : '開始模擬面試'}
-                  </button>
-                </>
-              ) : null}
-
-              {interview.status === 'failed' ? (
-                <p className="text-red-700">題目產生失敗，請建立另一場面試。</p>
-              ) : null}
-
-              {interview.status === 'in_progress' ? (
-                <>
-                  <h2 className="text-xl font-semibold text-slate-900">面試進行中</h2>
-                  <a
-                    href={`/interviews/${interview.id}/session`}
-                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-                  >
-                    繼續面試
-                  </a>
-                </>
-              ) : null}
-
-              {interview.status === 'completed' ? (
-                <>
-                  <h2 className="text-xl font-semibold text-slate-900">面試已完成</h2>
-                  <a
-                    href={`/interviews/${interview.id}/result`}
-                    className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-                  >
-                    查看結果
-                  </a>
-                </>
-              ) : null}
-            </section>
+            <StatusBadge tone="primary">{interview.status}</StatusBadge>
           </div>
-        ) : null}
-      </section>
-    </main>
+
+          {interview.status === 'generating_questions' ? (
+            <Card className="flex min-h-[45vh] flex-col items-center justify-center p-xl text-center">
+              <div className="relative mb-lg h-16 w-16">
+                <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+                <div className="absolute inset-0 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+              <h2 className="font-headline text-headline-md text-on-surface">題目準備中</h2>
+              <p className="mt-sm max-w-md text-body-sm text-on-surface-variant">
+                AI 導師正在根據您的背景與職位需求，為您量身定制面試題目。
+              </p>
+            </Card>
+          ) : null}
+
+          {interview.status === 'questions_ready' ? (
+            <Card className="p-lg md:p-xl">
+              <div className="flex flex-col gap-lg md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="font-headline text-headline-md text-on-surface">題目已準備完成</h2>
+                  <p className="mt-sm text-body-sm text-on-surface-variant">
+                    準備好後即可開始。題目會在面試過程中逐題朗讀。
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleStartInterview}
+                  disabled={isStarting}
+                  icon="play_arrow"
+                  className="w-full md:w-auto"
+                >
+                  {isStarting ? '開始中...' : '開始模擬面試'}
+                </Button>
+              </div>
+            </Card>
+          ) : null}
+
+          {interview.status === 'failed' ? (
+            <Card className="border-error/20 bg-error-container p-lg text-on-error-container">
+              <h2 className="font-headline text-headline-sm">題目產生失敗</h2>
+              <p className="mt-sm text-body-sm">請建立另一場面試。</p>
+            </Card>
+          ) : null}
+
+          {interview.status === 'in_progress' ? (
+            <Card className="p-lg md:p-xl">
+              <h2 className="font-headline text-headline-md text-on-surface">面試進行中</h2>
+              <p className="mt-sm text-body-sm text-on-surface-variant">
+                您可以回到目前的面試流程繼續作答。
+              </p>
+              <LinkButton href={`/interviews/${interview.id}/session`} icon="play_arrow" className="mt-lg">
+                繼續面試
+              </LinkButton>
+            </Card>
+          ) : null}
+
+          {interview.status === 'completed' ? (
+            <Card className="p-lg md:p-xl">
+              <h2 className="font-headline text-headline-md text-on-surface">面試已完成</h2>
+              <p className="mt-sm text-body-sm text-on-surface-variant">
+                查看每一題題目與您上傳的回答音檔。
+              </p>
+              <LinkButton href={`/interviews/${interview.id}/result`} icon="query_stats" className="mt-lg">
+                查看結果
+              </LinkButton>
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
+      </PageShell>
+    </>
   )
 }
