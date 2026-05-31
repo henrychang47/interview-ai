@@ -1,4 +1,4 @@
-import { FormEvent, MouseEvent, useState } from 'react'
+import { FormEvent, MouseEvent, useEffect, useRef, useState } from 'react'
 
 import { createInterview } from '../api/interviews'
 import { Button, Card, Icon, StatusBadge, StepProgress, TopBar } from '../components/ui'
@@ -44,27 +44,110 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isTestingMicrophone, setIsTestingMicrophone] = useState(false)
+  const [isRecordingMicrophoneTest, setIsRecordingMicrophoneTest] = useState(false)
   const [microphoneReady, setMicrophoneReady] = useState(false)
   const [microphoneError, setMicrophoneError] = useState<string | null>(null)
+  const [microphonePreviewURL, setMicrophonePreviewURL] = useState<string | null>(null)
+  const microphoneRecorderRef = useRef<MediaRecorder | null>(null)
+  const microphoneStreamRef = useRef<MediaStream | null>(null)
+  const microphoneChunksRef = useRef<Blob[]>([])
   const isProfileComplete =
     form.job_title.trim() !== '' &&
     form.job_description.trim() !== '' &&
     form.user_profile.trim() !== ''
 
+  function stopMicrophoneStream() {
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop())
+    microphoneStreamRef.current = null
+  }
+
+  function clearMicrophonePreview() {
+    setMicrophonePreviewURL((currentURL) => {
+      if (currentURL) {
+        URL.revokeObjectURL(currentURL)
+      }
+      return null
+    })
+  }
+
+  useEffect(() => {
+    return () => {
+      if (microphoneRecorderRef.current?.state === 'recording') {
+        microphoneRecorderRef.current.stop()
+      }
+      stopMicrophoneStream()
+      if (microphonePreviewURL) {
+        URL.revokeObjectURL(microphonePreviewURL)
+      }
+    }
+  }, [microphonePreviewURL])
+
   async function testMicrophone() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setMicrophoneReady(false)
+      setMicrophoneError('此瀏覽器不支援麥克風錄音，請改用支援 MediaRecorder 的瀏覽器。')
+      return
+    }
+
     setIsTestingMicrophone(true)
     setMicrophoneError(null)
+    setMicrophoneReady(false)
+    clearMicrophonePreview()
+    microphoneChunksRef.current = []
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-      setMicrophoneReady(true)
+      microphoneStreamRef.current = stream
+      const recorderOptions =
+        typeof MediaRecorder.isTypeSupported === 'function' &&
+          MediaRecorder.isTypeSupported('audio/webm')
+          ? { mimeType: 'audio/webm' }
+          : undefined
+      const recorder = new MediaRecorder(stream, recorderOptions)
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          microphoneChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const recordedBlob = new Blob(microphoneChunksRef.current, { type: 'audio/webm' })
+        stopMicrophoneStream()
+        microphoneRecorderRef.current = null
+        setIsRecordingMicrophoneTest(false)
+        setIsTestingMicrophone(false)
+
+        if (recordedBlob.size === 0) {
+          setMicrophoneReady(false)
+          setMicrophoneError('沒有錄到聲音，請再試一次。')
+          return
+        }
+
+        setMicrophonePreviewURL(URL.createObjectURL(recordedBlob))
+        setMicrophoneReady(true)
+      }
+
+      microphoneRecorderRef.current = recorder
+      recorder.start()
+      setIsRecordingMicrophoneTest(true)
     } catch (error) {
       setMicrophoneReady(false)
       setMicrophoneError(getMicrophoneErrorMessage(error))
-    } finally {
+      stopMicrophoneStream()
       setIsTestingMicrophone(false)
     }
+  }
+
+  function stopMicrophoneTest() {
+    if (microphoneRecorderRef.current?.state === 'recording') {
+      microphoneRecorderRef.current.stop()
+      return
+    }
+
+    stopMicrophoneStream()
+    setIsRecordingMicrophoneTest(false)
+    setIsTestingMicrophone(false)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -99,6 +182,7 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
   function handleBackToProfile(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
+    stopMicrophoneTest()
     setStep('profile')
   }
 
@@ -262,23 +346,49 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
                         <div>
                           <p className="text-body-md font-bold">麥克風測試</p>
                           <p className="text-body-sm text-on-surface-variant">
-                            請允許存取麥克風以進行測試
+                            錄製一小段語音並播放確認收音效果
                           </p>
                         </div>
                       </div>
                       <Button
                         type="button"
-                        tone="secondary"
-                        icon="settings_voice"
-                        disabled={isTestingMicrophone}
-                        onClick={testMicrophone}
+                        tone={isRecordingMicrophoneTest ? 'danger' : 'secondary'}
+                        icon={isRecordingMicrophoneTest ? 'stop_circle' : 'settings_voice'}
+                        disabled={isTestingMicrophone && !isRecordingMicrophoneTest}
+                        onClick={isRecordingMicrophoneTest ? stopMicrophoneTest : testMicrophone}
                         className="w-full md:w-auto"
                       >
-                        {isTestingMicrophone ? '測試中...' : '測試麥克風'}
+                        {isRecordingMicrophoneTest
+                          ? '停止錄音'
+                          : isTestingMicrophone
+                            ? '準備錄音...'
+                            : microphonePreviewURL
+                              ? '重新測試'
+                              : '測試麥克風'}
                       </Button>
                     </div>
 
+                    {microphonePreviewURL ? (
+                      <div className="mt-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md">
+                        <p className="mb-sm text-label-md font-bold text-on-surface">
+                          測試錄音預覽
+                        </p>
+                        <audio
+                          aria-label="麥克風測試錄音預覽"
+                          controls
+                          className="w-full"
+                          src={microphonePreviewURL}
+                        />
+                      </div>
+                    ) : null}
+
                     <div className="mt-md flex flex-wrap gap-sm">
+                      {isRecordingMicrophoneTest ? (
+                        <StatusBadge tone="primary">
+                          <Icon name="graphic_eq" className="text-[18px]" />
+                          錄音中，請說一小段話
+                        </StatusBadge>
+                      ) : null}
                       {microphoneReady ? (
                         <StatusBadge tone="success">
                           <Icon name="check_circle" className="text-[18px]" />

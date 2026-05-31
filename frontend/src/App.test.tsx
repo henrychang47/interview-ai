@@ -191,6 +191,7 @@ describe('App', () => {
 
   it('submits the two-stage create interview form after microphone test', async () => {
     const media = installMediaRecorderMock()
+    installObjectURLMock()
     mockPathname('/interviews/new')
     const fetchMock = mockFetchOnce({ id: 'interview-123', status: 'generating_questions' })
     vi.stubGlobal('fetch', fetchMock)
@@ -214,6 +215,17 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '測試麥克風' }))
     await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
+    await waitFor(() => expect(media.recorders).toHaveLength(1))
+    expect(media.recorders[0].start).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '停止錄音' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '建立面試' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '停止錄音' }))
+
+    expect(await screen.findByLabelText('麥克風測試錄音預覽')).toHaveAttribute(
+      'src',
+      'blob:recorded-answer',
+    )
     expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
@@ -260,6 +272,7 @@ describe('App', () => {
 
   it('shows an API error when create interview fails', async () => {
     installMediaRecorderMock()
+    installObjectURLMock()
     mockPathname('/interviews/new')
     vi.stubGlobal('fetch', mockFetchOnce({ error: 'job_title is required' }, { status: 400 }))
 
@@ -274,6 +287,7 @@ describe('App', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     fireEvent.click(await screen.findByRole('button', { name: '測試麥克風' }))
+    fireEvent.click(await screen.findByRole('button', { name: '停止錄音' }))
     expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
 

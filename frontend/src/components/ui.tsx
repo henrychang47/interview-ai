@@ -102,7 +102,6 @@ export function TopBar({
         className={`mx-auto flex h-16 w-full ${maxWidth} items-center justify-between gap-md px-margin-mobile md:px-margin-desktop`}
       >
         <a href="/" className="flex min-w-0 items-center gap-base font-headline text-headline-md font-bold text-primary">
-          <Icon name="school" className="shrink-0 text-[28px]" />
           <span className="truncate">Mock Interview</span>
         </a>
         {action ? (
@@ -164,23 +163,20 @@ export function StepProgress({
         return (
           <div
             key={label}
-            className={`flex min-w-0 flex-1 items-center gap-sm ${
-              index === 1 ? 'justify-end' : ''
-            } ${isActive ? '' : 'opacity-50'}`}
+            className={`flex min-w-0 flex-1 items-center gap-sm ${index === 1 ? 'justify-end' : ''
+              } ${isActive ? '' : 'opacity-50'}`}
           >
             <div
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-label-md font-bold ${
-                isActive
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-label-md font-bold ${isActive
                   ? 'bg-primary text-on-primary'
                   : 'border border-outline text-on-surface-variant'
-              }`}
+                }`}
             >
               {stepNumber}
             </div>
             <span
-              className={`truncate text-label-md font-bold ${
-                isActive ? 'text-primary' : 'text-on-surface-variant'
-              }`}
+              className={`truncate text-label-md font-bold ${isActive ? 'text-primary' : 'text-on-surface-variant'
+                }`}
             >
               {label}
             </span>

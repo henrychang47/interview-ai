@@ -290,6 +290,30 @@ Verification:
 - `npm test` passed in `frontend`.
 - `npm run build` passed in `frontend`.
 
+## Microphone Test Recording Preview
+
+Completed on 2026-06-01.
+
+Implemented:
+
+- Updated the new interview setup microphone test to record a short sample through `MediaRecorder`.
+- Added a stop-recording control and local audio preview so users can play back the sample before creating an interview.
+- Kept the create-interview button disabled until a microphone sample is recorded successfully.
+- Preserved microphone permission and unsupported-browser error handling.
+
+Verification:
+
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `npm test` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
+Manual verification:
+
+- Open `/interviews/new`, fill the profile step, and continue to settings.
+- Click `測試麥克風`, speak briefly, then click `停止錄音`.
+- Play `測試錄音預覽` and confirm the recorded audio is audible.
+- Confirm `建立面試` becomes enabled only after the preview is available.
+
 ## Next Step
 
 Post-MVP / Phase 2: Step 13 - STT mock.
