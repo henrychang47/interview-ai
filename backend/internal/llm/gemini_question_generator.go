@@ -1,25 +1,22 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/genai"
 )
 
 const (
-	defaultGeminiBaseURL       = "https://generativelanguage.googleapis.com/v1beta"
 	defaultGeminiModel         = "gemini-2.5-flash"
 	defaultGeminiFallbackModel = "gemini-2.5-flash-lite"
-	defaultGeminiTimeout       = 30 * time.Second
 	defaultGeminiMaxAttempts   = 3
 	maxRetryAfterDelay         = 5 * time.Second
 )
@@ -33,9 +30,6 @@ type GeminiQuestionGeneratorConfig struct {
 	APIKey        string
 	Model         string
 	FallbackModel string
-	BaseURL       string
-	Client        *http.Client
-	Timeout       time.Duration
 	Backoff       func(context.Context, int, *http.Response) error
 }
 
@@ -43,17 +37,27 @@ type GeminiQuestionGenerator struct {
 	apiKey        string
 	model         string
 	fallbackModel string
-	baseURL       string
-	client        *http.Client
-	timeout       time.Duration
+	models        geminiContentGenerator
+	clientErr     error
 	backoff       func(context.Context, int, *http.Response) error
 }
 
-func NewGeminiQuestionGenerator(config GeminiQuestionGeneratorConfig) *GeminiQuestionGenerator {
-	baseURL := strings.TrimRight(config.BaseURL, "/")
-	if baseURL == "" {
-		baseURL = defaultGeminiBaseURL
+type geminiContentGenerator interface {
+	GenerateContent(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error)
+}
+
+var newGeminiModels = func(ctx context.Context, apiKey string) (geminiContentGenerator, error) {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+	})
+	if err != nil {
+		return nil, err
 	}
+	return client.Models, nil
+}
+
+func NewGeminiQuestionGenerator(config GeminiQuestionGeneratorConfig) *GeminiQuestionGenerator {
+	apiKey := strings.TrimSpace(config.APIKey)
 	model := strings.TrimSpace(config.Model)
 	if model == "" {
 		model = defaultGeminiModel
@@ -62,55 +66,25 @@ func NewGeminiQuestionGenerator(config GeminiQuestionGeneratorConfig) *GeminiQue
 	if fallbackModel == "" {
 		fallbackModel = defaultGeminiFallbackModel
 	}
-	client := config.Client
-	if client == nil {
-		client = &http.Client{Timeout: defaultGeminiTimeout}
-	}
-	timeout := config.Timeout
-	if timeout <= 0 {
-		timeout = defaultGeminiTimeout
-	}
 	backoff := config.Backoff
 	if backoff == nil {
 		backoff = sleepBeforeGeminiRetry
 	}
 
+	var models geminiContentGenerator
+	var clientErr error
+	if apiKey != "" {
+		models, clientErr = newGeminiModels(context.Background(), apiKey)
+	}
+
 	return &GeminiQuestionGenerator{
-		apiKey:        config.APIKey,
+		apiKey:        apiKey,
 		model:         model,
 		fallbackModel: fallbackModel,
-		baseURL:       baseURL,
-		client:        client,
-		timeout:       timeout,
+		models:        models,
+		clientErr:     clientErr,
 		backoff:       backoff,
 	}
-}
-
-type geminiGenerateContentRequest struct {
-	Contents         []geminiContent        `json:"contents"`
-	GenerationConfig geminiGenerationConfig `json:"generationConfig"`
-}
-
-type geminiContent struct {
-	Role  string       `json:"role,omitempty"`
-	Parts []geminiPart `json:"parts"`
-}
-
-type geminiPart struct {
-	Text string `json:"text"`
-}
-
-type geminiGenerationConfig struct {
-	ResponseMIMEType   string         `json:"responseMimeType"`
-	ResponseJSONSchema map[string]any `json:"responseJsonSchema"`
-}
-
-type geminiGenerateContentResponse struct {
-	Candidates []geminiCandidate `json:"candidates"`
-}
-
-type geminiCandidate struct {
-	Content geminiContent `json:"content"`
 }
 
 type generatedQuestionsResponse struct {
@@ -125,6 +99,12 @@ type generatedQuestionJSON struct {
 func (g *GeminiQuestionGenerator) GenerateQuestions(ctx context.Context, input GenerateQuestionsInput) ([]GeneratedQuestion, error) {
 	if strings.TrimSpace(g.apiKey) == "" {
 		return nil, ErrGeminiAPIKeyRequired
+	}
+	if g.clientErr != nil {
+		return nil, fmt.Errorf("create Gemini client: %w", g.clientErr)
+	}
+	if g.models == nil {
+		return nil, errors.New("Gemini client is not initialized")
 	}
 
 	models := []string{g.model}
@@ -150,7 +130,7 @@ func (g *GeminiQuestionGenerator) GenerateQuestions(ctx context.Context, input G
 func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context, model string, input GenerateQuestionsInput) ([]GeneratedQuestion, error) {
 	var lastErr error
 	for attempt := 1; attempt <= defaultGeminiMaxAttempts; attempt++ {
-		response, err := g.callGemini(ctx, model, input)
+		text, err := g.callGemini(ctx, model, input)
 		if err != nil {
 			lastErr = err
 			if !isTransientGeminiError(err) || attempt == defaultGeminiMaxAttempts {
@@ -162,26 +142,6 @@ func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context
 			continue
 		}
 
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			err := geminiStatusError{statusCode: response.StatusCode}
-			lastErr = err
-			if !isRetryableGeminiStatus(response.StatusCode) || attempt == defaultGeminiMaxAttempts {
-				return nil, err
-			}
-			if backoffErr := g.backoff(ctx, attempt, response); backoffErr != nil {
-				return nil, backoffErr
-			}
-			continue
-		}
-
-		var geminiResponse geminiGenerateContentResponse
-		if err := json.NewDecoder(response.Body).Decode(&geminiResponse); err != nil {
-			_ = response.Body.Close()
-			return nil, fmt.Errorf("%w: decode Gemini response: %v", ErrInvalidLLMResponse, err)
-		}
-		_ = response.Body.Close()
-
-		text := extractGeminiOutputText(geminiResponse)
 		if text == "" {
 			return nil, fmt.Errorf("%w: missing output text", ErrInvalidLLMResponse)
 		}
@@ -197,53 +157,21 @@ func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context
 	return nil, lastErr
 }
 
-func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, input GenerateQuestionsInput) (*http.Response, error) {
-	payload := geminiGenerateContentRequest{
-		Contents: []geminiContent{
-			{
-				Role: "user",
-				Parts: []geminiPart{
-					{Text: buildQuestionPrompt(input)},
-				},
-			},
-		},
-		GenerationConfig: geminiGenerationConfig{
+func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, input GenerateQuestionsInput) (string, error) {
+	response, err := g.models.GenerateContent(
+		ctx,
+		strings.TrimPrefix(model, "models/"),
+		genai.Text(buildQuestionPrompt(input)),
+		&genai.GenerateContentConfig{
 			ResponseMIMEType:   "application/json",
-			ResponseJSONSchema: buildQuestionResponseSchema(input.QuestionCount),
+			ResponseJsonSchema: buildQuestionResponseSchema(input.QuestionCount),
 		},
-	}
-
-	body, err := json.Marshal(payload)
+	)
 	if err != nil {
-		return nil, fmt.Errorf("marshal Gemini request: %w", err)
+		return "", err
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, g.timeout)
-
-	endpoint := fmt.Sprintf("%s/models/%s:generateContent", g.baseURL, url.PathEscape(strings.TrimPrefix(model, "models/")))
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("create Gemini request: %w", err)
-	}
-	request.Header.Set("x-goog-api-key", g.apiKey)
-	request.Header.Set("Content-Type", "application/json")
-
-	response, err := g.client.Do(request)
-	if err != nil {
-		cancel()
-		return nil, geminiTransportError{err: err}
-	}
-	response.Body = cancelOnCloseReadCloser{
-		ReadCloser: response.Body,
-		cancel:     cancel,
-	}
-
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_ = response.Body.Close()
-	}
-
-	return response, nil
+	return response.Text(), nil
 }
 
 func buildQuestionPrompt(input GenerateQuestionsInput) string {
@@ -304,17 +232,6 @@ func buildQuestionResponseSchema(questionCount int) map[string]any {
 	}
 }
 
-func extractGeminiOutputText(response geminiGenerateContentResponse) string {
-	for _, candidate := range response.Candidates {
-		for _, part := range candidate.Content.Parts {
-			if strings.TrimSpace(part.Text) != "" {
-				return part.Text
-			}
-		}
-	}
-	return ""
-}
-
 func validateGeneratedQuestions(rawQuestions []generatedQuestionJSON, expectedCount int) ([]GeneratedQuestion, error) {
 	if len(rawQuestions) != expectedCount {
 		return nil, fmt.Errorf("%w: expected %d questions, got %d", ErrInvalidLLMResponse, expectedCount, len(rawQuestions))
@@ -347,49 +264,14 @@ func validateGeneratedQuestions(rawQuestions []generatedQuestionJSON, expectedCo
 	return questions, nil
 }
 
-type geminiStatusError struct {
-	statusCode int
-}
-
-func (e geminiStatusError) Error() string {
-	return fmt.Sprintf("Gemini API returned status %d", e.statusCode)
-}
-
-type geminiTransportError struct {
-	err error
-}
-
-func (e geminiTransportError) Error() string {
-	return fmt.Sprintf("call Gemini API: %v", e.err)
-}
-
-func (e geminiTransportError) Unwrap() error {
-	return e.err
-}
-
-type cancelOnCloseReadCloser struct {
-	io.ReadCloser
-	cancel context.CancelFunc
-}
-
-func (r cancelOnCloseReadCloser) Close() error {
-	err := r.ReadCloser.Close()
-	r.cancel()
-	return err
-}
-
 func isTransientGeminiError(err error) bool {
-	var statusErr geminiStatusError
-	if errors.As(err, &statusErr) {
-		return isRetryableGeminiStatus(statusErr.statusCode)
+	var apiErr genai.APIError
+	if errors.As(err, &apiErr) {
+		return isRetryableGeminiStatus(apiErr.Code) || isRetryableGeminiAPIStatus(apiErr.Status)
 	}
 
-	var transportErr geminiTransportError
-	if errors.As(err, &transportErr) {
-		var netErr net.Error
-		if errors.As(transportErr.err, &netErr) && netErr.Timeout() {
-			return true
-		}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
 		return true
 	}
 
@@ -398,6 +280,15 @@ func isTransientGeminiError(err error) bool {
 
 func isRetryableGeminiStatus(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || statusCode == http.StatusServiceUnavailable
+}
+
+func isRetryableGeminiAPIStatus(status string) bool {
+	switch status {
+	case "RESOURCE_EXHAUSTED", "UNAVAILABLE":
+		return true
+	default:
+		return false
+	}
 }
 
 func sleepBeforeGeminiRetry(ctx context.Context, attempt int, response *http.Response) error {

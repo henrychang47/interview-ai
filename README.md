@@ -6,7 +6,7 @@
 
 - Docker Desktop
 - Docker Compose
-- Go 1.22
+- Go 1.24
 - Node.js 20
 
 ## Setup
@@ -142,7 +142,7 @@ docker compose up --build -d backend frontend
 
 Never commit real API keys. Keep local secrets in `.env`.
 
-When Gemini mode is enabled, the backend sends the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. Transient Gemini `429` and `503` responses are retried before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
+When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. Transient Gemini `429` / `RESOURCE_EXHAUSTED` and `503` / `UNAVAILABLE` responses are retried before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
 
 ## Local Checks
 

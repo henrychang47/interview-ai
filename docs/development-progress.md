@@ -263,6 +263,26 @@ Verification:
 - `npm run build --prefix frontend` passed.
 - Manual Docker Compose verification confirmed the result page displays uploaded answers and audio controls can load `/audio/...webm`.
 
+### Gemini SDK Maintenance
+
+Completed on 2026-05-31.
+
+Implemented:
+
+- Kept the existing `QuestionGenerator` interface.
+- Kept the existing `GeminiQuestionGenerator` provider type.
+- Replaced the hand-written Gemini REST request layer with `google.golang.org/genai` v1.58.0.
+- Reused one GenAI client per `GeminiQuestionGenerator` instance.
+- Simplified production `genai.ClientConfig` to only provide `APIKey` and rely on SDK defaults.
+- Preserved mock-mode behavior when `GEMINI_API_KEY` is empty.
+- Preserved configured primary/fallback Gemini models and generated-question JSON validation.
+- Updated local backend Go requirement to Go 1.24.
+
+Verification:
+
+- `go test ./internal/llm` passed in `backend`.
+- `go test ./...` passed in `backend`.
+
 ## Next Step
 
 Step 13 - STT mock.

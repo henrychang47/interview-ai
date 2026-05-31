@@ -84,7 +84,7 @@ Question generation:
 - If `GEMINI_API_KEY` is set, the backend calls Gemini to generate questions from `job_title`, `job_description`, and `user_profile`.
 - `question_language` must be `zh-TW` or `en-US`. Empty values default to `zh-TW`.
 - The create API returns immediately with `generating_questions`; question generation finishes in the background.
-- Gemini requests use `GEMINI_MODEL` first and fall back to `GEMINI_FALLBACK_MODEL` after retrying transient `429` or `503` failures.
+- Gemini requests use `google.golang.org/genai` v1.58.0 with `GEMINI_MODEL` first and fall back to `GEMINI_FALLBACK_MODEL` after retrying transient `429` / `RESOURCE_EXHAUSTED` or `503` / `UNAVAILABLE` failures.
 - The backend validates the LLM JSON response before saving questions.
 
 ## Get Interview
