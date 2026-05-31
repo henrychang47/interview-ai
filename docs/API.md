@@ -2,6 +2,8 @@
 
 Base URL: `http://localhost:8080`
 
+This API set covers the completed MVP v1 core flow: create an interview, generate questions, start the interview, upload answer audio, complete the interview, and serve uploaded answer audio for the result page.
+
 ## Health Check
 
 ```http

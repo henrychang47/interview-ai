@@ -4,9 +4,28 @@
 
 ## Current Status
 
-- Current step: Step 12 - 建立面試結果頁
+- Current milestone: MVP v1 completed
 - Status: Completed
-- Last updated: 2026-05-27
+- Last updated: 2026-05-31
+
+## MVP Completion Summary
+
+MVP v1 is complete. Steps 1-12 are implemented and the first-version completion definition in `docs/mvp-spec.md` section 16 is satisfied.
+
+The core MVP flow is fully connected:
+
+```text
+建立面試
+→ 產生問題
+→ 開始面試
+→ 使用瀏覽器 TTS 朗讀問題
+→ 使用 MediaRecorder 錄音
+→ 上傳回答音檔
+→ 完成整場面試
+→ 在結果頁查看題目與回答音檔
+```
+
+Step 13 and later are post-MVP / Phase 2 work. STT mock, real STT providers, export/download flows, scoring, AI feedback, and follow-up questions are not required to consider MVP v1 complete.
 
 ## Step Progress
 
@@ -138,16 +157,16 @@ Completed on 2026-05-26.
 Implemented:
 
 - Kept the existing `QuestionGenerator` interface.
-- Added OpenAI-backed question generation.
-- Added optional `OPENAI_API_KEY` and configurable `OPENAI_MODEL`.
+- Added Gemini-backed question generation.
+- Added optional `GEMINI_API_KEY`, configurable `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`.
 - Preserved mock question generation when no API key is configured.
-- Validated OpenAI JSON output before saving questions.
+- Validated Gemini JSON output before saving questions.
 
 Verification:
 
 - `go test ./...` passed in `backend`.
-- Mock-mode create interview flow returned generated questions without `OPENAI_API_KEY`.
-- OpenAI-mode verification was skipped because no local API key was configured.
+- Mock-mode create interview flow returned generated questions without `GEMINI_API_KEY`.
+- Gemini-mode verification was completed during later Gemini integration and SDK maintenance work.
 
 ### Step 7 - 模擬面試頁
 
@@ -285,7 +304,7 @@ Verification:
 
 ## Next Step
 
-Step 13 - STT mock.
+Post-MVP Step 13 - STT mock.
 
 Expected work:
 

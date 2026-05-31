@@ -4,9 +4,15 @@
 
 ## Current Status
 
-- Current step: Immersive interview flow
+- Current milestone: MVP v1 completed
 - Status: Completed
 - Last updated: 2026-05-31
+
+## MVP Completion Summary
+
+MVP v1 is complete. Steps 1-12 are implemented and the `docs/mvp-spec.md` section 16 first-version completion definition is satisfied: users can create an interview, generate or mock questions, start the simulated interview, hear each question through browser TTS, record answers, upload each answer audio file, complete the interview, and review questions with uploaded answer audio on the result page.
+
+Future work starts after the MVP baseline. STT, real transcription providers, export/download flows, scoring, AI feedback, and follow-up questions are post-MVP / Phase 2+ work unless explicitly reprioritized.
 
 ## Progress
 
@@ -268,7 +274,7 @@ Verification:
 
 ## Next Step
 
-Step 13 - STT mock.
+Post-MVP / Phase 2: Step 13 - STT mock.
 
 Expected work:
 
