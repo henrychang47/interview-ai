@@ -16,6 +16,9 @@ const initialForm: CreateInterviewRequest = {
   question_language: 'zh-TW',
 }
 
+const JOB_TITLE_MAX_LENGTH = 50
+const LONG_TEXT_MAX_LENGTH = 4000
+
 type SetupStep = 'profile' | 'settings'
 
 function getMicrophoneErrorMessage(error: unknown) {
@@ -230,42 +233,68 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
                       className="focus-calm w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
                       placeholder="例如：後端工程師"
                       required
+                      maxLength={JOB_TITLE_MAX_LENGTH}
                       value={form.job_title}
                       onChange={(event) =>
-                        setForm((current) => ({ ...current, job_title: event.target.value }))
+                        setForm((current) => ({
+                          ...current,
+                          job_title: event.target.value.slice(0, JOB_TITLE_MAX_LENGTH),
+                        }))
                       }
                     />
                   </label>
 
-                  <label className="block">
-                    <span className="mb-sm block text-label-md font-semibold text-on-surface">
+                  <div className="block">
+                    <label
+                      htmlFor="job_description"
+                      className="mb-sm block text-label-md font-semibold text-on-surface"
+                    >
                       職位要求及說明
-                    </span>
+                    </label>
                     <textarea
+                      id="job_description"
                       className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
                       placeholder="貼上職缺描述或條列主要技能需求..."
                       required
+                      maxLength={LONG_TEXT_MAX_LENGTH}
                       value={form.job_description}
                       onChange={(event) =>
-                        setForm((current) => ({ ...current, job_description: event.target.value }))
+                        setForm((current) => ({
+                          ...current,
+                          job_description: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
+                        }))
                       }
                     />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-sm block text-label-md font-semibold text-on-surface">
-                      個人資訊
+                    <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
+                      {form.job_description.length}/{LONG_TEXT_MAX_LENGTH}
                     </span>
+                  </div>
+
+                  <div className="block">
+                    <label
+                      htmlFor="user_profile"
+                      className="mb-sm block text-label-md font-semibold text-on-surface"
+                    >
+                      個人資訊
+                    </label>
                     <textarea
+                      id="user_profile"
                       className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
                       placeholder="簡述您的相關經驗或貼上履歷摘要..."
                       required
+                      maxLength={LONG_TEXT_MAX_LENGTH}
                       value={form.user_profile}
                       onChange={(event) =>
-                        setForm((current) => ({ ...current, user_profile: event.target.value }))
+                        setForm((current) => ({
+                          ...current,
+                          user_profile: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
+                        }))
                       }
                     />
-                  </label>
+                    <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
+                      {form.user_profile.length}/{LONG_TEXT_MAX_LENGTH}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-xl flex justify-end">

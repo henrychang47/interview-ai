@@ -189,6 +189,32 @@ describe('App', () => {
     expect(screen.getByLabelText('題目數量')).toBeInTheDocument()
   })
 
+  it('limits profile field lengths and shows counters for long text fields', () => {
+    mockPathname('/interviews/new')
+
+    render(<App />)
+
+    const jobTitle = screen.getByLabelText('職位名稱')
+    const jobDescription = screen.getByLabelText('職位要求及說明')
+    const userProfile = screen.getByLabelText('個人資訊')
+
+    expect(jobTitle).toHaveAttribute('maxLength', '50')
+    expect(jobDescription).toHaveAttribute('maxLength', '4000')
+    expect(userProfile).toHaveAttribute('maxLength', '4000')
+    expect(screen.getAllByText('0/4000')).toHaveLength(2)
+    expect(screen.queryByText('0/50')).not.toBeInTheDocument()
+
+    fireEvent.change(jobTitle, { target: { value: '前'.repeat(51) } })
+    fireEvent.change(jobDescription, { target: { value: '職'.repeat(4001) } })
+    fireEvent.change(userProfile, { target: { value: '個'.repeat(123) } })
+
+    expect(jobTitle).toHaveValue('前'.repeat(50))
+    expect(jobDescription).toHaveValue('職'.repeat(4000))
+    expect(userProfile).toHaveValue('個'.repeat(123))
+    expect(screen.getByText('4000/4000')).toBeInTheDocument()
+    expect(screen.getByText('123/4000')).toBeInTheDocument()
+  })
+
   it('submits the two-stage create interview form after microphone test', async () => {
     const media = installMediaRecorderMock()
     installObjectURLMock()

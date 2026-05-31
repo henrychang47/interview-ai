@@ -314,6 +314,30 @@ Manual verification:
 - Play `測試錄音預覽` and confirm the recorded audio is audible.
 - Confirm `建立面試` becomes enabled only after the preview is available.
 
+## Interview Setup Input Length Limits
+
+Completed on 2026-06-01.
+
+Implemented:
+
+- Limited the new interview job title field to 50 characters.
+- Limited job requirements and user profile fields to 4000 characters.
+- Added right-aligned `目前字數/4000` counters below the job requirements and user profile fields.
+- Kept the job title field without a visible character counter.
+
+Verification:
+
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `npm test` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
+Manual verification:
+
+- Open `/interviews/new`.
+- Confirm `職位名稱` stops accepting input after 50 characters and shows no counter.
+- Confirm `職位要求及說明` and `個人資訊` stop at 4000 characters.
+- Confirm both long text fields display counters such as `目前字數/4000` in the lower-right area below the field.
+
 ## Next Step
 
 Post-MVP / Phase 2: Step 13 - STT mock.
