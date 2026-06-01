@@ -102,7 +102,7 @@ export function TopBar({
         className={`mx-auto flex h-16 w-full ${maxWidth} items-center justify-between gap-md px-margin-mobile md:px-margin-desktop`}
       >
         <a href="/" className="flex min-w-0 items-center gap-base font-headline text-headline-md font-bold text-primary">
-          <span className="truncate">Mock Interview</span>
+          <span className="truncate">AI模擬面試</span>
         </a>
         {action ? (
           <a
@@ -168,8 +168,8 @@ export function StepProgress({
           >
             <div
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-label-md font-bold ${isActive
-                  ? 'bg-primary text-on-primary'
-                  : 'border border-outline text-on-surface-variant'
+                ? 'bg-primary text-on-primary'
+                : 'border border-outline text-on-surface-variant'
                 }`}
             >
               {stepNumber}
