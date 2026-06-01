@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { getInterview } from '../api/interviews'
+import { MarkdownText } from '../components/MarkdownText'
 import { Card, Icon, PageShell, StatusBadge, TopBar } from '../components/ui'
 import type { Answer, InterviewDetail } from '../types/interview'
 
@@ -202,9 +203,7 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
                                     <Icon name="tips_and_updates" className="text-[16px]" />
                                     改進建議
                                   </p>
-                                  <p className="text-body-md leading-7 text-on-surface">
-                                    {answer.improvement_suggestions ?? '尚無建議'}
-                                  </p>
+                                  <MarkdownText text={answer.improvement_suggestions ?? '尚無建議'} />
                                 </div>
                               </>
                             ) : (

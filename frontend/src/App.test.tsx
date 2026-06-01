@@ -614,6 +614,47 @@ describe('App', () => {
     )
   })
 
+  it('renders completed improvement suggestions as markdown with preserved line breaks', async () => {
+    mockPathname('/interviews/interview-123/result')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 學習經驗',
+        question_count: 1,
+        status: 'completed',
+        questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: '這是逐字稿。',
+            analysis_status: 'completed',
+            improvement_suggestions:
+              '### 回答建議\n\n- **補充具體案例**：說明你負責的 API。\n- 量化成果。\n\n下一步\n請加入 PostgreSQL schema 設計取捨。',
+            analysis_error: null,
+            analyzed_at: '2026-05-27T06:32:04Z',
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '回答建議' })).toBeInTheDocument()
+    expect(screen.getByText('補充具體案例').tagName.toLowerCase()).toBe('strong')
+    expect(screen.getByText(/說明你負責的 API/).closest('li')).toBeInTheDocument()
+
+    const nextStep = screen.getByText(/下一步/)
+    const nextStepParagraph = nextStep.closest('p')
+    expect(nextStepParagraph).toBeInTheDocument()
+    expect(nextStepParagraph?.querySelector('br')).toBeInTheDocument()
+  })
+
   it('polls the result page while answer analysis is processing', async () => {
     vi.useFakeTimers()
     mockPathname('/interviews/interview-123/result')

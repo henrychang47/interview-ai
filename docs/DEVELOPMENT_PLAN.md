@@ -353,12 +353,14 @@ Implemented:
 - Added result-page polling while any answer analysis is pending or processing.
 - Updated `.env.example`, `docs/API.md`, and `README.md` with the new configuration, API shape, and privacy notes.
 - Updated Gemini answer analysis to include the related job title, job requirements, user profile, and question text when generating suggestions.
+- Updated the result page to render Gemini improvement suggestions with basic Markdown formatting and preserved line breaks.
 
 Verification:
 
 - `go test ./...` passed in `backend`.
 - `npm test -- App.test.tsx` passed in `frontend`.
 - `go test ./internal/service ./internal/llm ./internal/repository` passed in `backend`.
+- `npm test -- App.test.tsx` passed in `frontend` after adding Markdown rendering coverage.
 
 Manual verification:
 
@@ -367,6 +369,7 @@ Manual verification:
 - Confirm the result page first shows `AI 分析中`.
 - In mock mode, confirm the result page updates to fixed mock transcript and improvement suggestion text.
 - With `GEMINI_API_KEY` configured, confirm answer audio is analyzed by Gemini and suggestions reflect the related question or job requirements.
+- Confirm Markdown in improvement suggestions, such as headings, bold text, lists, and line breaks, is rendered as formatted content on the result page.
 
 ## Next Step
 

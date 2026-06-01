@@ -122,6 +122,7 @@ http://localhost:5173/interviews/new
 - 確認 session 自動朗讀題目、隱藏題目文字、朗讀後自動錄音，並支援「回答結束」與「重新播放題目」。
 - 完成全部題目後確認結果頁顯示題目與可播放的回答音檔。
 - 確認結果頁先顯示「AI 分析中」，稍後顯示逐字稿與改進建議；mock mode 會產生固定測試文字。
+- 若 Gemini 回傳的改進建議包含 Markdown，例如標題、粗體、清單或換行，確認結果頁會正常排版顯示。
 
 When running the frontend outside Docker, make sure the backend is on `http://localhost:8080`, or set:
 
