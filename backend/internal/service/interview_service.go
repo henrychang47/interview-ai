@@ -85,6 +85,7 @@ func (s *InterviewService) CreateInterview(ctx context.Context, input model.Crea
 		defer cancel()
 
 		questions, err := s.generator.GenerateQuestions(generationCtx, llm.GenerateQuestionsInput{
+			InterviewID:      created.ID,
 			JobTitle:         input.JobTitle,
 			JobDescription:   input.JobDescription,
 			UserProfile:      input.UserProfile,

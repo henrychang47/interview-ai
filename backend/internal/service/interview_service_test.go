@@ -35,6 +35,9 @@ func TestCreateInterviewCreatesGeneratingInterviewAndStartsQuestionGeneration(t 
 	if generator.input.JobTitle != "後端工程師" {
 		t.Fatalf("expected trimmed job title, got %q", generator.input.JobTitle)
 	}
+	if generator.input.InterviewID != "interview-id" {
+		t.Fatalf("expected generator interview id, got %q", generator.input.InterviewID)
+	}
 	if generator.input.QuestionLanguage != model.QuestionLanguageZhTW {
 		t.Fatalf("expected zh-TW generator language, got %q", generator.input.QuestionLanguage)
 	}

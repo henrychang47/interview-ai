@@ -22,6 +22,17 @@ const (
 	AnswerAnalysisStatusProcessing = "processing"
 	AnswerAnalysisStatusCompleted  = "completed"
 	AnswerAnalysisStatusFailed     = "failed"
+
+	LLMOperationGenerateQuestions = "generate_questions"
+	LLMOperationAnalyzeAnswer     = "analyze_answer"
+
+	LLMProviderGemini = "gemini"
+
+	LLMCallStatusSuccess         = "success"
+	LLMCallStatusFailed          = "failed"
+	LLMCallStatusTimeout         = "timeout"
+	LLMCallStatusRateLimited     = "rate_limited"
+	LLMCallStatusInvalidResponse = "invalid_response"
 )
 
 type CreateInterviewRequest struct {
@@ -146,4 +157,20 @@ type AnswerAnalysisContext struct {
 	JobDescription string
 	UserProfile    string
 	QuestionText   string
+}
+
+type LLMCallLog struct {
+	Operation    string
+	Provider     string
+	Model        string
+	InterviewID  *string
+	QuestionID   *string
+	AnswerID     *string
+	Status       string
+	LatencyMS    *int
+	InputTokens  *int
+	OutputTokens *int
+	TotalTokens  *int
+	ErrorCode    *string
+	ErrorMessage *string
 }

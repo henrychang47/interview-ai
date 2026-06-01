@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"interview-ai/backend/internal/model"
 
@@ -26,6 +27,7 @@ type GeminiAnswerAnalyzerConfig struct {
 	APIKey        string
 	Model         string
 	FallbackModel string
+	Logger        CallLogger
 }
 
 type GeminiAnswerAnalyzer struct {
@@ -34,6 +36,7 @@ type GeminiAnswerAnalyzer struct {
 	fallbackModel string
 	models        geminiContentGenerator
 	clientErr     error
+	logger        CallLogger
 }
 
 func NewGeminiAnswerAnalyzer(config GeminiAnswerAnalyzerConfig) *GeminiAnswerAnalyzer {
@@ -59,6 +62,7 @@ func NewGeminiAnswerAnalyzer(config GeminiAnswerAnalyzerConfig) *GeminiAnswerAna
 		fallbackModel: fallbackModel,
 		models:        models,
 		clientErr:     clientErr,
+		logger:        config.Logger,
 	}
 }
 
@@ -109,6 +113,7 @@ func (a *GeminiAnswerAnalyzer) analyzeWithModel(ctx context.Context, modelName s
 		mimeType = "audio/webm"
 	}
 
+	start := time.Now()
 	response, err := a.models.GenerateContent(
 		ctx,
 		strings.TrimPrefix(modelName, "models/"),
@@ -123,28 +128,64 @@ func (a *GeminiAnswerAnalyzer) analyzeWithModel(ctx context.Context, modelName s
 			ResponseJsonSchema: buildAnswerAnalysisResponseSchema(),
 		},
 	)
+	callResult := geminiCallResult{latencyMS: elapsedMilliseconds(start)}
 	if err != nil {
+		a.logAnswerAnalysisCall(ctx, modelName, input, failedGeminiLogStatus(err), callResult, err)
 		return model.AnswerAnalysisResult{}, err
 	}
+	callResult.text = response.Text()
+	callResult.inputTokens, callResult.outputTokens, callResult.totalTokens = geminiUsageTokenCounts(response)
 
 	var parsed answerAnalysisResponse
-	if err := json.Unmarshal([]byte(response.Text()), &parsed); err != nil {
-		return model.AnswerAnalysisResult{}, fmt.Errorf("%w: decode answer analysis JSON: %v", ErrInvalidLLMResponse, err)
+	if err := json.Unmarshal([]byte(callResult.text), &parsed); err != nil {
+		invalidErr := fmt.Errorf("%w: decode answer analysis JSON: %v", ErrInvalidLLMResponse, err)
+		a.logAnswerAnalysisCall(ctx, modelName, input, model.LLMCallStatusInvalidResponse, callResult, invalidErr)
+		return model.AnswerAnalysisResult{}, invalidErr
 	}
 
 	transcript := strings.TrimSpace(parsed.TranscriptText)
 	suggestions := strings.TrimSpace(parsed.ImprovementSuggestions)
 	if transcript == "" {
-		return model.AnswerAnalysisResult{}, fmt.Errorf("%w: missing transcript_text", ErrInvalidLLMResponse)
+		err := fmt.Errorf("%w: missing transcript_text", ErrInvalidLLMResponse)
+		a.logAnswerAnalysisCall(ctx, modelName, input, model.LLMCallStatusInvalidResponse, callResult, err)
+		return model.AnswerAnalysisResult{}, err
 	}
 	if suggestions == "" {
-		return model.AnswerAnalysisResult{}, fmt.Errorf("%w: missing improvement_suggestions", ErrInvalidLLMResponse)
+		err := fmt.Errorf("%w: missing improvement_suggestions", ErrInvalidLLMResponse)
+		a.logAnswerAnalysisCall(ctx, modelName, input, model.LLMCallStatusInvalidResponse, callResult, err)
+		return model.AnswerAnalysisResult{}, err
 	}
 
+	a.logAnswerAnalysisCall(ctx, modelName, input, model.LLMCallStatusSuccess, callResult, nil)
 	return model.AnswerAnalysisResult{
 		TranscriptText:         transcript,
 		ImprovementSuggestions: suggestions,
 	}, nil
+}
+
+func (a *GeminiAnswerAnalyzer) logAnswerAnalysisCall(ctx context.Context, modelName string, input model.AnswerAnalysisInput, status string, result geminiCallResult, err error) {
+	log := model.LLMCallLog{
+		Operation:    model.LLMOperationAnalyzeAnswer,
+		Provider:     model.LLMProviderGemini,
+		Model:        strings.TrimPrefix(modelName, "models/"),
+		Status:       status,
+		LatencyMS:    intPtr(result.latencyMS),
+		InputTokens:  result.inputTokens,
+		OutputTokens: result.outputTokens,
+		TotalTokens:  result.totalTokens,
+		ErrorCode:    geminiErrorCode(err),
+		ErrorMessage: geminiErrorMessage(err),
+	}
+	if strings.TrimSpace(input.InterviewID) != "" {
+		log.InterviewID = stringPtr(input.InterviewID)
+	}
+	if strings.TrimSpace(input.QuestionID) != "" {
+		log.QuestionID = stringPtr(input.QuestionID)
+	}
+	if strings.TrimSpace(input.AnswerID) != "" {
+		log.AnswerID = stringPtr(input.AnswerID)
+	}
+	logGeminiCall(ctx, a.logger, log)
 }
 
 func buildAnswerAnalysisPrompt(input model.AnswerAnalysisInput) string {

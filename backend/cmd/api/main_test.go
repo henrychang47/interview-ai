@@ -108,7 +108,7 @@ func TestQuestionGeneratorForConfigUsesMockWithoutGeminiKey(t *testing.T) {
 		GeminiAPIKey:        "",
 		GeminiModel:         "gemini-2.5-flash",
 		GeminiFallbackModel: "gemini-2.5-flash-lite",
-	})
+	}, nil)
 
 	if _, ok := generator.(llm.MockQuestionGenerator); !ok {
 		t.Fatalf("expected MockQuestionGenerator, got %T", generator)
@@ -120,7 +120,7 @@ func TestQuestionGeneratorForConfigUsesGeminiWithGeminiKey(t *testing.T) {
 		GeminiAPIKey:        "test-key",
 		GeminiModel:         "gemini-2.5-flash",
 		GeminiFallbackModel: "gemini-2.5-flash-lite",
-	})
+	}, nil)
 
 	if _, ok := generator.(*llm.GeminiQuestionGenerator); !ok {
 		t.Fatalf("expected GeminiQuestionGenerator, got %T", generator)

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"interview-ai/backend/internal/model"
+
 	"google.golang.org/genai"
 )
 
@@ -103,6 +105,126 @@ func TestGeminiQuestionGeneratorReturnsQuestions(t *testing.T) {
 	}
 	if questions[1].Order != 2 || questions[1].Text != "你如何設計 PostgreSQL schema？" {
 		t.Fatalf("unexpected second question: %+v", questions[1])
+	}
+}
+
+func TestGeminiQuestionGeneratorLogsSuccessfulCall(t *testing.T) {
+	logger := &stubLLMCallLogger{}
+	models := &fakeGeminiModels{
+		results: []fakeGeminiResult{
+			{
+				text:         `{"questions":[{"order":1,"question":"問題一"}]}`,
+				inputTokens:  11,
+				outputTokens: 7,
+				totalTokens:  18,
+			},
+		},
+	}
+	replaceGeminiModelsFactory(t, func(ctx context.Context, apiKey string) (geminiContentGenerator, error) {
+		return models, nil
+	})
+
+	generator := NewGeminiQuestionGenerator(GeminiQuestionGeneratorConfig{
+		APIKey:        "test-key",
+		Model:         "gemini-2.5-flash",
+		FallbackModel: "gemini-2.5-flash-lite",
+		Backoff:       noBackoff,
+		Logger:        logger,
+	})
+
+	_, err := generator.GenerateQuestions(context.Background(), GenerateQuestionsInput{
+		InterviewID:    "11111111-1111-1111-1111-111111111111",
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  1,
+	})
+	if err != nil {
+		t.Fatalf("GenerateQuestions returned error: %v", err)
+	}
+
+	if len(logger.logs) != 1 {
+		t.Fatalf("expected one LLM call log, got %d", len(logger.logs))
+	}
+	log := logger.logs[0]
+	if log.Operation != model.LLMOperationGenerateQuestions {
+		t.Fatalf("expected generate_questions operation, got %q", log.Operation)
+	}
+	if log.Provider != model.LLMProviderGemini {
+		t.Fatalf("expected gemini provider, got %q", log.Provider)
+	}
+	if log.Model != "gemini-2.5-flash" {
+		t.Fatalf("expected primary model, got %q", log.Model)
+	}
+	if log.InterviewID == nil || *log.InterviewID != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("expected interview id, got %+v", log.InterviewID)
+	}
+	if log.Status != model.LLMCallStatusSuccess {
+		t.Fatalf("expected success status, got %q", log.Status)
+	}
+	if log.InputTokens == nil || *log.InputTokens != 11 {
+		t.Fatalf("expected 11 input tokens, got %+v", log.InputTokens)
+	}
+	if log.OutputTokens == nil || *log.OutputTokens != 7 {
+		t.Fatalf("expected 7 output tokens, got %+v", log.OutputTokens)
+	}
+	if log.TotalTokens == nil || *log.TotalTokens != 18 {
+		t.Fatalf("expected 18 total tokens, got %+v", log.TotalTokens)
+	}
+}
+
+func TestGeminiQuestionGeneratorLogsRetryFailuresAndFallbackAttempt(t *testing.T) {
+	logger := &stubLLMCallLogger{}
+	models := &fakeGeminiModels{
+		results: []fakeGeminiResult{
+			{err: genai.APIError{Code: http.StatusServiceUnavailable, Status: "UNAVAILABLE"}},
+			{err: genai.APIError{Code: http.StatusServiceUnavailable, Status: "UNAVAILABLE"}},
+			{err: genai.APIError{Code: http.StatusServiceUnavailable, Status: "UNAVAILABLE"}},
+			{text: `{"questions":[{"order":1,"question":"fallback 問題"}]}`},
+		},
+	}
+	replaceGeminiModelsFactory(t, func(ctx context.Context, apiKey string) (geminiContentGenerator, error) {
+		return models, nil
+	})
+
+	generator := NewGeminiQuestionGenerator(GeminiQuestionGeneratorConfig{
+		APIKey:        "test-key",
+		Model:         "gemini-2.5-flash",
+		FallbackModel: "gemini-2.5-flash-lite",
+		Backoff:       noBackoff,
+		Logger:        logger,
+	})
+
+	_, err := generator.GenerateQuestions(context.Background(), GenerateQuestionsInput{
+		InterviewID:    "11111111-1111-1111-1111-111111111111",
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  1,
+	})
+	if err != nil {
+		t.Fatalf("GenerateQuestions returned error: %v", err)
+	}
+
+	if len(logger.logs) != 4 {
+		t.Fatalf("expected 4 LLM call logs, got %d", len(logger.logs))
+	}
+	for i := 0; i < 3; i++ {
+		if logger.logs[i].Model != "gemini-2.5-flash" {
+			t.Fatalf("expected primary model on log %d, got %q", i+1, logger.logs[i].Model)
+		}
+		if logger.logs[i].Status != model.LLMCallStatusFailed {
+			t.Fatalf("expected failed status on log %d, got %q", i+1, logger.logs[i].Status)
+		}
+		if logger.logs[i].ErrorCode == nil || *logger.logs[i].ErrorCode != "503" {
+			t.Fatalf("expected 503 error code on log %d, got %+v", i+1, logger.logs[i].ErrorCode)
+		}
+	}
+	if logger.logs[3].Model != "gemini-2.5-flash-lite" {
+		t.Fatalf("expected fallback model, got %q", logger.logs[3].Model)
+	}
+	if logger.logs[3].Status != model.LLMCallStatusSuccess {
+		t.Fatalf("expected fallback success, got %q", logger.logs[3].Status)
 	}
 }
 
@@ -333,6 +455,9 @@ func (f *fakeGeminiModels) GenerateContent(ctx context.Context, model string, co
 	if result.err != nil {
 		return nil, result.err
 	}
+	if result.inputTokens != 0 || result.outputTokens != 0 || result.totalTokens != 0 {
+		return genAITextResponseWithUsage(result), nil
+	}
 	return genAITextResponse(result.text), nil
 }
 
@@ -343,8 +468,11 @@ type fakeGeminiCall struct {
 }
 
 type fakeGeminiResult struct {
-	text string
-	err  error
+	text         string
+	err          error
+	inputTokens  int32
+	outputTokens int32
+	totalTokens  int32
 }
 
 func genAITextResponse(text string) *genai.GenerateContentResponse {
@@ -355,6 +483,26 @@ func genAITextResponse(text string) *genai.GenerateContentResponse {
 			},
 		},
 	}
+}
+
+func genAITextResponseWithUsage(result fakeGeminiResult) *genai.GenerateContentResponse {
+	response := genAITextResponse(result.text)
+	response.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
+		PromptTokenCount:     result.inputTokens,
+		CandidatesTokenCount: result.outputTokens,
+		TotalTokenCount:      result.totalTokens,
+	}
+	return response
+}
+
+type stubLLMCallLogger struct {
+	logs []model.LLMCallLog
+	err  error
+}
+
+func (l *stubLLMCallLogger) CreateLLMCallLog(ctx context.Context, log model.LLMCallLog) error {
+	l.logs = append(l.logs, log)
+	return l.err
 }
 
 func noBackoff(context.Context, int, *http.Response) error {

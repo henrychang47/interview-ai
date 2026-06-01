@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"interview-ai/backend/internal/model"
+
 	"google.golang.org/genai"
 )
 
@@ -31,6 +33,7 @@ type GeminiQuestionGeneratorConfig struct {
 	Model         string
 	FallbackModel string
 	Backoff       func(context.Context, int, *http.Response) error
+	Logger        CallLogger
 }
 
 type GeminiQuestionGenerator struct {
@@ -40,6 +43,7 @@ type GeminiQuestionGenerator struct {
 	models        geminiContentGenerator
 	clientErr     error
 	backoff       func(context.Context, int, *http.Response) error
+	logger        CallLogger
 }
 
 type geminiContentGenerator interface {
@@ -84,6 +88,7 @@ func NewGeminiQuestionGenerator(config GeminiQuestionGeneratorConfig) *GeminiQue
 		models:        models,
 		clientErr:     clientErr,
 		backoff:       backoff,
+		logger:        config.Logger,
 	}
 }
 
@@ -127,11 +132,12 @@ func (g *GeminiQuestionGenerator) GenerateQuestions(ctx context.Context, input G
 	return nil, lastErr
 }
 
-func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context, model string, input GenerateQuestionsInput) ([]GeneratedQuestion, error) {
+func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context, modelName string, input GenerateQuestionsInput) ([]GeneratedQuestion, error) {
 	var lastErr error
 	for attempt := 1; attempt <= defaultGeminiMaxAttempts; attempt++ {
-		text, err := g.callGemini(ctx, model, input)
+		callResult, err := g.callGemini(ctx, modelName, input)
 		if err != nil {
+			g.logQuestionCall(ctx, modelName, input.InterviewID, failedGeminiLogStatus(err), callResult, err)
 			lastErr = err
 			if !isTransientGeminiError(err) || attempt == defaultGeminiMaxAttempts {
 				return nil, err
@@ -142,22 +148,33 @@ func (g *GeminiQuestionGenerator) generateQuestionsWithModel(ctx context.Context
 			continue
 		}
 
-		if text == "" {
-			return nil, fmt.Errorf("%w: missing output text", ErrInvalidLLMResponse)
+		if callResult.text == "" {
+			err := fmt.Errorf("%w: missing output text", ErrInvalidLLMResponse)
+			g.logQuestionCall(ctx, modelName, input.InterviewID, model.LLMCallStatusInvalidResponse, callResult, err)
+			return nil, err
 		}
 
 		var questionResponse generatedQuestionsResponse
-		if err := json.Unmarshal([]byte(text), &questionResponse); err != nil {
-			return nil, fmt.Errorf("%w: decode question JSON: %v", ErrInvalidLLMResponse, err)
+		if err := json.Unmarshal([]byte(callResult.text), &questionResponse); err != nil {
+			invalidErr := fmt.Errorf("%w: decode question JSON: %v", ErrInvalidLLMResponse, err)
+			g.logQuestionCall(ctx, modelName, input.InterviewID, model.LLMCallStatusInvalidResponse, callResult, invalidErr)
+			return nil, invalidErr
 		}
 
-		return validateGeneratedQuestions(questionResponse.Questions, input.QuestionCount)
+		questions, err := validateGeneratedQuestions(questionResponse.Questions, input.QuestionCount)
+		if err != nil {
+			g.logQuestionCall(ctx, modelName, input.InterviewID, model.LLMCallStatusInvalidResponse, callResult, err)
+			return nil, err
+		}
+		g.logQuestionCall(ctx, modelName, input.InterviewID, model.LLMCallStatusSuccess, callResult, nil)
+		return questions, nil
 	}
 
 	return nil, lastErr
 }
 
-func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, input GenerateQuestionsInput) (string, error) {
+func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, input GenerateQuestionsInput) (geminiCallResult, error) {
+	start := time.Now()
 	response, err := g.models.GenerateContent(
 		ctx,
 		strings.TrimPrefix(model, "models/"),
@@ -167,11 +184,35 @@ func (g *GeminiQuestionGenerator) callGemini(ctx context.Context, model string, 
 			ResponseJsonSchema: buildQuestionResponseSchema(input.QuestionCount),
 		},
 	)
-	if err != nil {
-		return "", err
+	result := geminiCallResult{
+		latencyMS: elapsedMilliseconds(start),
 	}
+	if err != nil {
+		return result, err
+	}
+	result.text = response.Text()
+	result.inputTokens, result.outputTokens, result.totalTokens = geminiUsageTokenCounts(response)
 
-	return response.Text(), nil
+	return result, nil
+}
+
+func (g *GeminiQuestionGenerator) logQuestionCall(ctx context.Context, modelName string, interviewID string, status string, result geminiCallResult, err error) {
+	log := model.LLMCallLog{
+		Operation:    model.LLMOperationGenerateQuestions,
+		Provider:     model.LLMProviderGemini,
+		Model:        strings.TrimPrefix(modelName, "models/"),
+		Status:       status,
+		LatencyMS:    intPtr(result.latencyMS),
+		InputTokens:  result.inputTokens,
+		OutputTokens: result.outputTokens,
+		TotalTokens:  result.totalTokens,
+		ErrorCode:    geminiErrorCode(err),
+		ErrorMessage: geminiErrorMessage(err),
+	}
+	if strings.TrimSpace(interviewID) != "" {
+		log.InterviewID = stringPtr(interviewID)
+	}
+	logGeminiCall(ctx, g.logger, log)
 }
 
 func buildQuestionPrompt(input GenerateQuestionsInput) string {

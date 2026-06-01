@@ -10,6 +10,7 @@ type QuestionGenerator interface {
 }
 
 type GenerateQuestionsInput struct {
+	InterviewID      string
 	JobTitle         string
 	JobDescription   string
 	UserProfile      string

@@ -371,6 +371,25 @@ Manual verification:
 - With `GEMINI_API_KEY` configured, confirm answer audio is analyzed by Gemini and suggestions reflect the related question or job requirements.
 - Confirm Markdown in improvement suggestions, such as headings, bold text, lists, and line breaks, is rendered as formatted content on the result page.
 
+## LLM Call Logging
+
+Completed on 2026-06-01.
+
+Implemented:
+
+- Added migration `000004_create_llm_call_logs` for persistent LLM call logs.
+- Recorded operation, provider, model, related interview/question/answer IDs, status, latency, input/output/total tokens, and sanitized error details.
+- Logged every real Gemini `GenerateContent` attempt for question generation, including retries and fallback model attempts.
+- Logged every real Gemini `GenerateContent` attempt for answer analysis, linked to the answer, question, and interview.
+- Kept mock generator and mock answer analyzer from writing LLM call logs.
+- Kept public API response shapes unchanged and intentionally did not add `request_id`.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `docker compose run --rm migrate` applied migration version 4.
+- `docker compose exec -T postgres psql -U interview_ai -d interview_ai -c "\d llm_call_logs"` confirmed the table, token columns, indexes, and nullable foreign keys.
+
 ## Next Step
 
 Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.

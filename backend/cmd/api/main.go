@@ -38,9 +38,10 @@ func main() {
 
 	interviewRepository := repository.NewInterviewRepository(pool)
 	answerRepository := repository.NewAnswerRepository(pool)
+	llmCallLogRepository := repository.NewLLMCallLogRepository(pool)
 	audioStorage := storage.NewLocalAudioStorage("storage/audio")
-	questionGenerator := questionGeneratorForConfig(cfg)
-	answerAnalyzer := answerAnalyzerForConfig(cfg)
+	questionGenerator := questionGeneratorForConfig(cfg, llmCallLogRepository)
+	answerAnalyzer := answerAnalyzerForConfig(cfg, llmCallLogRepository)
 	answerAnalysisQueue := service.NewBackgroundAnswerAnalysisQueue(context.Background(), answerRepository, answerAnalyzer)
 	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
 	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
@@ -53,7 +54,7 @@ func main() {
 	}
 }
 
-func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
+func questionGeneratorForConfig(cfg config.Config, logger llm.CallLogger) llm.QuestionGenerator {
 	if cfg.GeminiAPIKey == "" {
 		slog.Info("using mock question generator", "reason", "GEMINI_API_KEY not configured")
 		return llm.MockQuestionGenerator{}
@@ -64,10 +65,11 @@ func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
 		APIKey:        cfg.GeminiAPIKey,
 		Model:         cfg.GeminiModel,
 		FallbackModel: cfg.GeminiFallbackModel,
+		Logger:        logger,
 	})
 }
 
-func answerAnalyzerForConfig(cfg config.Config) service.AnswerAnalyzer {
+func answerAnalyzerForConfig(cfg config.Config, logger llm.CallLogger) service.AnswerAnalyzer {
 	if cfg.GeminiAPIKey == "" {
 		slog.Info("using mock answer analyzer", "reason", "GEMINI_API_KEY not configured")
 		return llm.MockAnswerAnalyzer{}
@@ -78,6 +80,7 @@ func answerAnalyzerForConfig(cfg config.Config) service.AnswerAnalyzer {
 		APIKey:        cfg.GeminiAPIKey,
 		Model:         cfg.GeminiAnswerModel,
 		FallbackModel: cfg.GeminiAnswerFallbackModel,
+		Logger:        logger,
 	})
 }
 
