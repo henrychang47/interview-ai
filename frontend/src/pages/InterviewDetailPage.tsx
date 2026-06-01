@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getInterview, startInterview } from '../api/interviews'
 import { Button, Card, Icon, InfoDisclosure, LinkButton, PageShell, StatusBadge, TopBar } from '../components/ui'
@@ -13,9 +13,12 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const isPollingRef = useRef(false)
 
-  const loadInterview = useCallback(async () => {
-    setIsLoading(true)
+  const loadInterview = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) {
+      setIsLoading(true)
+    }
     setError(null)
 
     try {
@@ -24,7 +27,9 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
     } catch (error) {
       setError(error instanceof Error ? error.message : '載入面試失敗')
     } finally {
-      setIsLoading(false)
+      if (showLoading) {
+        setIsLoading(false)
+      }
     }
   }, [interviewID])
 
@@ -37,8 +42,17 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
       return
     }
 
-    const intervalID = window.setInterval(() => {
-      loadInterview()
+    const intervalID = window.setInterval(async () => {
+      if (isPollingRef.current) {
+        return
+      }
+
+      isPollingRef.current = true
+      try {
+        await loadInterview({ showLoading: false })
+      } finally {
+        isPollingRef.current = false
+      }
     }, 2000)
 
     return () => window.clearInterval(intervalID)

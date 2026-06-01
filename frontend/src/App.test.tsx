@@ -23,6 +23,33 @@ function findElementByExactText(text: string) {
   )
 }
 
+function interviewDetailResponse(overrides: Record<string, unknown> = {}) {
+  return new Response(
+    JSON.stringify({
+      id: 'interview-123',
+      job_title: '後端工程師',
+      job_description: '需要熟悉 Go、PostgreSQL、REST API',
+      user_profile: '有 Java 和 Go 學習經驗',
+      question_count: 2,
+      question_language: 'zh-TW',
+      status: 'generating_questions',
+      questions: [],
+      answers: [],
+      ...overrides,
+    }),
+    { headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+function deferredResponse(response: Response) {
+  let resolve!: (response: Response) => void
+  const promise = new Promise<Response>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve: () => resolve(response) }
+}
+
 type MockUtterance = {
   text: string
   lang: string
@@ -359,6 +386,35 @@ describe('App', () => {
     })
     await act(async () => {})
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('keeps the question preparation page stable during background polling', async () => {
+    vi.useFakeTimers()
+    mockPathname('/interviews/interview-123')
+    const pollingResponse = deferredResponse(interviewDetailResponse())
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(interviewDetailResponse())
+      .mockReturnValueOnce(pollingResponse.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByText('題目準備中')).toBeInTheDocument()
+    expect(screen.queryByText('載入面試中...')).not.toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('題目準備中')).toBeInTheDocument()
+    expect(screen.queryByText('載入面試中...')).not.toBeInTheDocument()
+
+    pollingResponse.resolve()
+    await act(async () => {})
     vi.useRealTimers()
   })
 
@@ -768,6 +824,56 @@ describe('App', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(screen.getByText('這是逐字稿。')).toBeInTheDocument()
     expect(screen.getByText('回答可以更具體。')).toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('does not start overlapping result polling requests', async () => {
+    vi.useFakeTimers()
+    mockPathname('/interviews/interview-123/result')
+    const pendingAnswer = {
+      id: 'answer-1',
+      question_id: 'question-1',
+      audio_path: 'storage/audio/interview-123/question-1.webm',
+      transcript_text: null,
+      analysis_status: 'processing',
+      improvement_suggestions: null,
+      analysis_error: null,
+      analyzed_at: null,
+      created_at: '2026-05-27T06:30:04Z',
+    }
+    const slowPollingResponse = deferredResponse(
+      interviewDetailResponse({
+        status: 'completed',
+        questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+        answers: [pendingAnswer],
+      }),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        interviewDetailResponse({
+          status: 'completed',
+          questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+          answers: [pendingAnswer],
+        }),
+      )
+      .mockReturnValueOnce(slowPollingResponse.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByText('AI 分析中')).toBeInTheDocument()
+
+    await act(async () => {
+      vi.advanceTimersByTime(6000)
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('載入面試結果中...')).not.toBeInTheDocument()
+
+    slowPollingResponse.resolve()
+    await act(async () => {})
     vi.useRealTimers()
   })
 

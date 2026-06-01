@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview } from '../api/interviews'
 import { MarkdownText } from '../components/MarkdownText'
@@ -21,6 +21,7 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isPollingRef = useRef(false)
 
   useEffect(() => {
     let isMounted = true
@@ -71,6 +72,11 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
     }
 
     const intervalID = window.setInterval(() => {
+      if (isPollingRef.current) {
+        return
+      }
+
+      isPollingRef.current = true
       getInterview(interviewID)
         .then((detail) => {
           setInterview(detail)
@@ -79,9 +85,15 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
         .catch((error) => {
           setError(error instanceof Error ? error.message : '載入面試結果失敗')
         })
+        .finally(() => {
+          isPollingRef.current = false
+        })
     }, 3000)
 
-    return () => window.clearInterval(intervalID)
+    return () => {
+      window.clearInterval(intervalID)
+      isPollingRef.current = false
+    }
   }, [hasPendingAnalysis, interviewID])
 
   return (
