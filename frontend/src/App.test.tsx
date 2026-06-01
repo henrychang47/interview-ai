@@ -571,6 +571,10 @@ describe('App', () => {
             question_id: 'question-1',
             audio_path: 'storage/audio/interview-123/question-1.webm',
             transcript_text: null,
+            analysis_status: 'pending',
+            improvement_suggestions: null,
+            analysis_error: null,
+            analyzed_at: null,
             created_at: '2026-05-27T06:30:04Z',
           },
           {
@@ -578,6 +582,10 @@ describe('App', () => {
             question_id: 'question-2',
             audio_path: 'storage/audio/interview-123/question-2.webm',
             transcript_text: '我會先確認需求，再設計 resource 與錯誤格式。',
+            analysis_status: 'completed',
+            improvement_suggestions: '可以補充具體案例與取捨理由。',
+            analysis_error: null,
+            analyzed_at: '2026-05-27T06:32:04Z',
             created_at: '2026-05-27T06:31:04Z',
           },
         ],
@@ -593,8 +601,9 @@ describe('App', () => {
     expect(screen.getByText('completed')).toBeInTheDocument()
     expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
     expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
-    expect(screen.getByText('尚未轉錄')).toBeInTheDocument()
+    expect(screen.getByText('AI 分析中')).toBeInTheDocument()
     expect(screen.getByText('我會先確認需求，再設計 resource 與錯誤格式。')).toBeInTheDocument()
+    expect(screen.getByText('可以補充具體案例與取捨理由。')).toBeInTheDocument()
     expect(screen.getByLabelText('問題 1 回答音檔')).toHaveAttribute(
       'src',
       '/audio/interview-123/question-1.webm',
@@ -603,6 +612,115 @@ describe('App', () => {
       'src',
       '/audio/interview-123/question-2.webm',
     )
+  })
+
+  it('polls the result page while answer analysis is processing', async () => {
+    vi.useFakeTimers()
+    mockPathname('/interviews/interview-123/result')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 學習經驗',
+            question_count: 1,
+            status: 'completed',
+            questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+            answers: [
+              {
+                id: 'answer-1',
+                question_id: 'question-1',
+                audio_path: 'storage/audio/interview-123/question-1.webm',
+                transcript_text: null,
+                analysis_status: 'processing',
+                improvement_suggestions: null,
+                analysis_error: null,
+                analyzed_at: null,
+                created_at: '2026-05-27T06:30:04Z',
+              },
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 學習經驗',
+            question_count: 1,
+            status: 'completed',
+            questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+            answers: [
+              {
+                id: 'answer-1',
+                question_id: 'question-1',
+                audio_path: 'storage/audio/interview-123/question-1.webm',
+                transcript_text: '這是逐字稿。',
+                analysis_status: 'completed',
+                improvement_suggestions: '回答可以更具體。',
+                analysis_error: null,
+                analyzed_at: '2026-05-27T06:32:04Z',
+                created_at: '2026-05-27T06:30:04Z',
+              },
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await act(async () => {})
+
+    expect(screen.getByText('AI 分析中')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await act(async () => {})
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('這是逐字稿。')).toBeInTheDocument()
+    expect(screen.getByText('回答可以更具體。')).toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('shows failed answer analysis on the result page', async () => {
+    mockPathname('/interviews/interview-123/result')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 學習經驗',
+        question_count: 1,
+        status: 'completed',
+        questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: 'storage/audio/interview-123/question-1.webm',
+            transcript_text: null,
+            analysis_status: 'failed',
+            improvement_suggestions: null,
+            analysis_error: 'Gemini 分析失敗',
+            analyzed_at: null,
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('分析失敗，請稍後重新上傳回答')).toBeInTheDocument()
+    expect(screen.getByText('Gemini 分析失敗')).toBeInTheDocument()
   })
 
   it('shows a missing-answer state on the result page', async () => {

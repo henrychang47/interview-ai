@@ -6,7 +6,7 @@
 
 - Current milestone: MVP v1 completed
 - Status: Completed
-- Last updated: 2026-05-31
+- Last updated: 2026-06-01
 
 ## MVP Completion Summary
 
@@ -338,12 +338,42 @@ Manual verification:
 - Confirm `職位要求及說明` and `個人資訊` stop at 4000 characters.
 - Confirm both long text fields display counters such as `目前字數/4000` in the lower-right area below the field.
 
+## Gemini Answer Analysis
+
+Completed on 2026-06-01.
+
+Implemented:
+
+- Added migration `000003_add_answer_analysis_fields` for answer analysis status, suggestions, error text, and analyzed timestamp.
+- Added background answer analysis after successful audio upload.
+- Added mock answer analysis when `GEMINI_API_KEY` is empty.
+- Added Gemini-backed audio analysis with structured JSON output for `transcript_text` and `improvement_suggestions`.
+- Updated answer upload and interview detail responses with analysis metadata.
+- Updated the result page to show pending/processing, completed, and failed analysis states.
+- Added result-page polling while any answer analysis is pending or processing.
+- Updated `.env.example`, `docs/API.md`, and `README.md` with the new configuration, API shape, and privacy notes.
+- Updated Gemini answer analysis to include the related job title, job requirements, user profile, and question text when generating suggestions.
+
+Verification:
+
+- `go test ./...` passed in `backend`.
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `go test ./internal/service ./internal/llm ./internal/repository` passed in `backend`.
+
+Manual verification:
+
+- Run migrations with `docker compose run --rm migrate`.
+- Complete a mock interview and upload all answer recordings.
+- Confirm the result page first shows `AI 分析中`.
+- In mock mode, confirm the result page updates to fixed mock transcript and improvement suggestion text.
+- With `GEMINI_API_KEY` configured, confirm answer audio is analyzed by Gemini and suggestions reflect the related question or job requirements.
+
 ## Next Step
 
-Post-MVP / Phase 2: Step 13 - STT mock.
+Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.
 
 Expected work:
 
-- Add a mock transcription flow that writes test `transcript_text`.
-- Display populated transcript text on the existing result page.
-- Keep real STT provider integration for a later step.
+- Add retry controls or re-analysis API for failed answer analysis.
+- Consider a durable job table if the background queue needs to survive backend restarts.
+- Add export/download once the analyzed result format is stable.

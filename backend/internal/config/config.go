@@ -10,11 +10,13 @@ import (
 )
 
 type Config struct {
-	DatabaseURL         string
-	LogLevel            string
-	GeminiAPIKey        string
-	GeminiModel         string
-	GeminiFallbackModel string
+	DatabaseURL               string
+	LogLevel                  string
+	GeminiAPIKey              string
+	GeminiModel               string
+	GeminiFallbackModel       string
+	GeminiAnswerModel         string
+	GeminiAnswerFallbackModel string
 }
 
 func Load() (Config, error) {
@@ -38,6 +40,14 @@ func Load() (Config, error) {
 	geminiFallbackModel := strings.TrimSpace(os.Getenv("GEMINI_FALLBACK_MODEL"))
 	if geminiFallbackModel == "" {
 		geminiFallbackModel = "gemini-2.5-flash-lite"
+	}
+	geminiAnswerModel := strings.TrimSpace(os.Getenv("GEMINI_ANSWER_MODEL"))
+	if geminiAnswerModel == "" {
+		geminiAnswerModel = geminiModel
+	}
+	geminiAnswerFallbackModel := strings.TrimSpace(os.Getenv("GEMINI_ANSWER_FALLBACK_MODEL"))
+	if geminiAnswerFallbackModel == "" {
+		geminiAnswerFallbackModel = geminiFallbackModel
 	}
 
 	if postgresHost == "" {
@@ -69,11 +79,13 @@ func Load() (Config, error) {
 	)
 
 	return Config{
-		DatabaseURL:         databaseURL,
-		LogLevel:            logLevel,
-		GeminiAPIKey:        geminiAPIKey,
-		GeminiModel:         geminiModel,
-		GeminiFallbackModel: geminiFallbackModel,
+		DatabaseURL:               databaseURL,
+		LogLevel:                  logLevel,
+		GeminiAPIKey:              geminiAPIKey,
+		GeminiModel:               geminiModel,
+		GeminiFallbackModel:       geminiFallbackModel,
+		GeminiAnswerModel:         geminiAnswerModel,
+		GeminiAnswerFallbackModel: geminiAnswerFallbackModel,
 	}, nil
 }
 

@@ -59,6 +59,44 @@ func TestUploadAnswerSavesAudioAndPersistsAnswer(t *testing.T) {
 	if response.TranscriptText != nil {
 		t.Fatalf("expected nil transcript text, got %+v", response.TranscriptText)
 	}
+	if response.AnalysisStatus != model.AnswerAnalysisStatusPending {
+		t.Fatalf("expected pending analysis status, got %q", response.AnalysisStatus)
+	}
+}
+
+func TestUploadAnswerEnqueuesAnalysisAfterSavingAnswer(t *testing.T) {
+	repository := &stubAnswerRepository{
+		answer: model.Answer{
+			ID:             "answer-id",
+			InterviewID:    "interview-id",
+			QuestionID:     "question-id",
+			AudioPath:      stringPointer("storage/audio/interview-id/question-id.webm"),
+			AnalysisStatus: model.AnswerAnalysisStatusPending,
+		},
+	}
+	queue := &stubAnswerAnalysisQueue{}
+	service := NewAnswerService(&stubAudioStorage{}, repository, queue)
+
+	_, err := service.UploadAnswer(context.Background(), UploadAnswerInput{
+		InterviewID: "interview-id",
+		QuestionID:  "question-id",
+		ContentType: "audio/webm",
+		Audio:       strings.NewReader("webm-bytes"),
+	})
+
+	if err != nil {
+		t.Fatalf("UploadAnswer returned error: %v", err)
+	}
+	if len(queue.jobs) != 1 {
+		t.Fatalf("expected one analysis job, got %d", len(queue.jobs))
+	}
+	job := queue.jobs[0]
+	if job.AnswerID != "answer-id" {
+		t.Fatalf("expected answer id answer-id, got %q", job.AnswerID)
+	}
+	if job.AudioPath != "storage/audio/interview-id/question-id.webm" {
+		t.Fatalf("expected audio path, got %q", job.AudioPath)
+	}
 }
 
 func TestUploadAnswerCompletesInterviewAfterSavingAnswer(t *testing.T) {
@@ -229,4 +267,12 @@ func (r *stubAnswerRepository) CompleteInterviewIfAllQuestionsAnswered(ctx conte
 
 func stringPointer(value string) *string {
 	return &value
+}
+
+type stubAnswerAnalysisQueue struct {
+	jobs []AnswerAnalysisJob
+}
+
+func (q *stubAnswerAnalysisQueue) Enqueue(job AnswerAnalysisJob) {
+	q.jobs = append(q.jobs, job)
 }

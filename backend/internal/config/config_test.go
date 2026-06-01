@@ -12,6 +12,8 @@ func TestLoadUsesMockLLMWhenGeminiKeyIsMissing(t *testing.T) {
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GEMINI_MODEL", "")
 	t.Setenv("GEMINI_FALLBACK_MODEL", "")
+	t.Setenv("GEMINI_ANSWER_MODEL", "")
+	t.Setenv("GEMINI_ANSWER_FALLBACK_MODEL", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -26,6 +28,12 @@ func TestLoadUsesMockLLMWhenGeminiKeyIsMissing(t *testing.T) {
 	}
 	if cfg.GeminiFallbackModel != "gemini-2.5-flash-lite" {
 		t.Fatalf("expected default fallback model gemini-2.5-flash-lite, got %q", cfg.GeminiFallbackModel)
+	}
+	if cfg.GeminiAnswerModel != cfg.GeminiModel {
+		t.Fatalf("expected answer model to default to question model, got %q", cfg.GeminiAnswerModel)
+	}
+	if cfg.GeminiAnswerFallbackModel != cfg.GeminiFallbackModel {
+		t.Fatalf("expected answer fallback model to default to question fallback model, got %q", cfg.GeminiAnswerFallbackModel)
 	}
 	if cfg.LogLevel != "info" {
 		t.Fatalf("expected default log level info, got %q", cfg.LogLevel)
@@ -63,6 +71,8 @@ func TestLoadReadsGeminiConfig(t *testing.T) {
 	t.Setenv("GEMINI_API_KEY", "test-key")
 	t.Setenv("GEMINI_MODEL", "gemini-custom-primary")
 	t.Setenv("GEMINI_FALLBACK_MODEL", "gemini-custom-fallback")
+	t.Setenv("GEMINI_ANSWER_MODEL", "gemini-answer-primary")
+	t.Setenv("GEMINI_ANSWER_FALLBACK_MODEL", "gemini-answer-fallback")
 
 	cfg, err := Load()
 	if err != nil {
@@ -77,6 +87,12 @@ func TestLoadReadsGeminiConfig(t *testing.T) {
 	}
 	if cfg.GeminiFallbackModel != "gemini-custom-fallback" {
 		t.Fatalf("expected GeminiFallbackModel gemini-custom-fallback, got %q", cfg.GeminiFallbackModel)
+	}
+	if cfg.GeminiAnswerModel != "gemini-answer-primary" {
+		t.Fatalf("expected GeminiAnswerModel gemini-answer-primary, got %q", cfg.GeminiAnswerModel)
+	}
+	if cfg.GeminiAnswerFallbackModel != "gemini-answer-fallback" {
+		t.Fatalf("expected GeminiAnswerFallbackModel gemini-answer-fallback, got %q", cfg.GeminiAnswerFallbackModel)
 	}
 }
 

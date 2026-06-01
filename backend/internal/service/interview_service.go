@@ -140,13 +140,24 @@ func mapInterviewDetailResponse(detail model.InterviewDetail) model.InterviewDet
 
 	answers := make([]model.AnswerResponse, 0, len(detail.Answers))
 	for _, answer := range detail.Answers {
-		answers = append(answers, model.AnswerResponse{
-			ID:             answer.ID,
-			QuestionID:     answer.QuestionID,
-			AudioPath:      answer.AudioPath,
-			TranscriptText: answer.TranscriptText,
-			CreatedAt:      answer.CreatedAt.Format(time.RFC3339),
-		})
+		response := model.AnswerResponse{
+			ID:                     answer.ID,
+			QuestionID:             answer.QuestionID,
+			AudioPath:              answer.AudioPath,
+			TranscriptText:         answer.TranscriptText,
+			AnalysisStatus:         answer.AnalysisStatus,
+			ImprovementSuggestions: answer.ImprovementSuggestions,
+			AnalysisError:          answer.AnalysisError,
+			CreatedAt:              answer.CreatedAt.Format(time.RFC3339),
+		}
+		if response.AnalysisStatus == "" {
+			response.AnalysisStatus = model.AnswerAnalysisStatusPending
+		}
+		if answer.AnalyzedAt != nil {
+			analyzedAt := answer.AnalyzedAt.Format(time.RFC3339)
+			response.AnalyzedAt = &analyzedAt
+		}
+		answers = append(answers, response)
 	}
 
 	return model.InterviewDetailResponse{

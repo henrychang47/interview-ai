@@ -24,7 +24,7 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
   useEffect(() => {
     let isMounted = true
 
-    async function loadInterview() {
+    async function loadInitialInterview() {
       setIsLoading(true)
       setError(null)
 
@@ -44,7 +44,7 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
       }
     }
 
-    loadInterview()
+    loadInitialInterview()
 
     return () => {
       isMounted = false
@@ -57,6 +57,31 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
       return answers
     }, {})
   }, [interview?.answers])
+
+  const hasPendingAnalysis = useMemo(() => {
+    return (interview?.answers ?? []).some((answer) =>
+      answer.analysis_status === 'pending' || answer.analysis_status === 'processing',
+    )
+  }, [interview?.answers])
+
+  useEffect(() => {
+    if (!hasPendingAnalysis) {
+      return
+    }
+
+    const intervalID = window.setInterval(() => {
+      getInterview(interviewID)
+        .then((detail) => {
+          setInterview(detail)
+          setError(null)
+        })
+        .catch((error) => {
+          setError(error instanceof Error ? error.message : '載入面試結果失敗')
+        })
+    }, 3000)
+
+    return () => window.clearInterval(intervalID)
+  }, [hasPendingAnalysis, interviewID])
 
   return (
     <>
@@ -151,15 +176,48 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
                               </div>
                             )}
 
-                            <div className="relative rounded-xl border border-outline-variant bg-surface-bright p-md">
-                              <p className="mb-sm flex items-center gap-xs text-label-md font-bold text-primary">
-                                <Icon name="notes" className="text-[16px]" />
-                                轉錄文字
-                              </p>
-                              <p className="text-body-md leading-7 text-on-surface">
-                                {answer.transcript_text ?? '尚未轉錄'}
-                              </p>
-                            </div>
+                            {answer.analysis_status === 'failed' ? (
+                              <div className="rounded-xl border border-error/30 bg-error-container/40 p-md text-on-error-container">
+                                <p className="flex items-center gap-xs text-label-md font-bold">
+                                  <Icon name="warning" className="text-[16px]" />
+                                  分析失敗，請稍後重新上傳回答
+                                </p>
+                                {answer.analysis_error ? (
+                                  <p className="mt-sm text-body-sm">{answer.analysis_error}</p>
+                                ) : null}
+                              </div>
+                            ) : answer.analysis_status === 'completed' ? (
+                              <>
+                                <div className="relative rounded-xl border border-outline-variant bg-surface-bright p-md">
+                                  <p className="mb-sm flex items-center gap-xs text-label-md font-bold text-primary">
+                                    <Icon name="notes" className="text-[16px]" />
+                                    轉錄文字
+                                  </p>
+                                  <p className="text-body-md leading-7 text-on-surface">
+                                    {answer.transcript_text ?? '尚未轉錄'}
+                                  </p>
+                                </div>
+                                <div className="relative rounded-xl border border-outline-variant bg-surface-bright p-md">
+                                  <p className="mb-sm flex items-center gap-xs text-label-md font-bold text-primary">
+                                    <Icon name="tips_and_updates" className="text-[16px]" />
+                                    改進建議
+                                  </p>
+                                  <p className="text-body-md leading-7 text-on-surface">
+                                    {answer.improvement_suggestions ?? '尚無建議'}
+                                  </p>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="rounded-xl border border-outline-variant bg-surface-bright p-md">
+                                <p className="flex items-center gap-xs text-label-md font-bold text-primary">
+                                  <Icon name="hourglass_empty" className="text-[16px]" />
+                                  AI 分析中
+                                </p>
+                                <p className="mt-sm text-body-sm text-on-surface-variant">
+                                  Gemini 正在產生逐字稿與改進建議，稍後會自動更新。
+                                </p>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <div className="flex flex-col items-center justify-center rounded-xl border border-error/30 bg-error-container/40 py-lg text-center">

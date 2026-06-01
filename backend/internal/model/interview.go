@@ -17,6 +17,11 @@ const (
 
 	QuestionLanguageZhTW = "zh-TW"
 	QuestionLanguageEnUS = "en-US"
+
+	AnswerAnalysisStatusPending    = "pending"
+	AnswerAnalysisStatusProcessing = "processing"
+	AnswerAnalysisStatusCompleted  = "completed"
+	AnswerAnalysisStatusFailed     = "failed"
 )
 
 type CreateInterviewRequest struct {
@@ -65,12 +70,16 @@ type InterviewDetail struct {
 }
 
 type Answer struct {
-	ID             string
-	InterviewID    string
-	QuestionID     string
-	AudioPath      *string
-	TranscriptText *string
-	CreatedAt      time.Time
+	ID                     string
+	InterviewID            string
+	QuestionID             string
+	AudioPath              *string
+	TranscriptText         *string
+	AnalysisStatus         string
+	ImprovementSuggestions *string
+	AnalysisError          *string
+	AnalyzedAt             *time.Time
+	CreatedAt              time.Time
 }
 
 type InterviewDetailResponse struct {
@@ -92,17 +101,49 @@ type QuestionResponse struct {
 }
 
 type AnswerResponse struct {
-	ID             string  `json:"id"`
-	QuestionID     string  `json:"question_id"`
-	AudioPath      *string `json:"audio_path"`
-	TranscriptText *string `json:"transcript_text"`
-	CreatedAt      string  `json:"created_at"`
+	ID                     string  `json:"id"`
+	QuestionID             string  `json:"question_id"`
+	AudioPath              *string `json:"audio_path"`
+	TranscriptText         *string `json:"transcript_text"`
+	AnalysisStatus         string  `json:"analysis_status"`
+	ImprovementSuggestions *string `json:"improvement_suggestions"`
+	AnalysisError          *string `json:"analysis_error"`
+	AnalyzedAt             *string `json:"analyzed_at"`
+	CreatedAt              string  `json:"created_at"`
 }
 
 type UploadAnswerResponse struct {
-	ID             string  `json:"id"`
-	InterviewID    string  `json:"interview_id"`
-	QuestionID     string  `json:"question_id"`
-	AudioPath      string  `json:"audio_path"`
-	TranscriptText *string `json:"transcript_text"`
+	ID                     string  `json:"id"`
+	InterviewID            string  `json:"interview_id"`
+	QuestionID             string  `json:"question_id"`
+	AudioPath              string  `json:"audio_path"`
+	TranscriptText         *string `json:"transcript_text"`
+	AnalysisStatus         string  `json:"analysis_status"`
+	ImprovementSuggestions *string `json:"improvement_suggestions"`
+	AnalysisError          *string `json:"analysis_error"`
+	AnalyzedAt             *string `json:"analyzed_at"`
+}
+
+type AnswerAnalysisInput struct {
+	AnswerID       string
+	InterviewID    string
+	QuestionID     string
+	AudioPath      string
+	AudioMIMEType  string
+	JobTitle       string
+	JobDescription string
+	UserProfile    string
+	QuestionText   string
+}
+
+type AnswerAnalysisResult struct {
+	TranscriptText         string
+	ImprovementSuggestions string
+}
+
+type AnswerAnalysisContext struct {
+	JobTitle       string
+	JobDescription string
+	UserProfile    string
+	QuestionText   string
 }

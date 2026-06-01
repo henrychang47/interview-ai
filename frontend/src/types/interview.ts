@@ -22,6 +22,10 @@ export type Answer = {
   question_id: string
   audio_path: string | null
   transcript_text: string | null
+  analysis_status: 'pending' | 'processing' | 'completed' | 'failed'
+  improvement_suggestions: string | null
+  analysis_error: string | null
+  analyzed_at: string | null
   created_at: string
 }
 
@@ -31,6 +35,10 @@ export type UploadAnswerResponse = {
   question_id: string
   audio_path: string
   transcript_text: string | null
+  analysis_status: 'pending' | 'processing' | 'completed' | 'failed'
+  improvement_suggestions: string | null
+  analysis_error: string | null
+  analyzed_at: string | null
 }
 
 export type InterviewDetail = {

@@ -44,6 +44,8 @@ Expected tables:
 - `questions`
 - `answers`
 
+The latest answer analysis migration adds `analysis_status`, `improvement_suggestions`, `analysis_error`, and `analyzed_at` to `answers`.
+
 ## Verification
 
 後端健康檢查：
@@ -119,6 +121,7 @@ http://localhost:5173/interviews/new
 - 等到「題目已準備完成」後按「開始模擬面試」。
 - 確認 session 自動朗讀題目、隱藏題目文字、朗讀後自動錄音，並支援「回答結束」與「重新播放題目」。
 - 完成全部題目後確認結果頁顯示題目與可播放的回答音檔。
+- 確認結果頁先顯示「AI 分析中」，稍後顯示逐字稿與改進建議；mock mode 會產生固定測試文字。
 
 When running the frontend outside Docker, make sure the backend is on `http://localhost:8080`, or set:
 
@@ -127,22 +130,28 @@ $env:VITE_API_PROXY_TARGET='http://localhost:8080'
 $env:VITE_MAX_ANSWER_RECORDING_SECONDS='180'
 ```
 
-## Question Generation Mode
+## Gemini and Mock AI Modes
 
-By default, the backend uses mock question generation when `GEMINI_API_KEY` is empty.
+By default, the backend uses mock question generation and mock answer analysis when `GEMINI_API_KEY` is empty.
 
-To enable Gemini-backed question generation:
+To enable Gemini-backed question generation and answer audio analysis:
 
 ```powershell
 $env:GEMINI_API_KEY='<your_api_key>'
 $env:GEMINI_MODEL='gemini-2.5-flash'
 $env:GEMINI_FALLBACK_MODEL='gemini-2.5-flash-lite'
+$env:GEMINI_ANSWER_MODEL='gemini-2.5-flash'
+$env:GEMINI_ANSWER_FALLBACK_MODEL='gemini-2.5-flash-lite'
 docker compose up --build -d backend frontend
 ```
 
 Never commit real API keys. Keep local secrets in `.env`.
 
-When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. Transient Gemini `429` / `RESOURCE_EXHAUSTED` and `503` / `UNAVAILABLE` responses are retried before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
+When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. After each answer upload, a background worker sends the saved WebM audio file plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini to generate `transcript_text` and context-aware `improvement_suggestions`. Empty `GEMINI_ANSWER_MODEL` values reuse the question-generation model settings.
+
+Transient Gemini `429` / `RESOURCE_EXHAUSTED` and `503` / `UNAVAILABLE` responses are retried for question generation before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
+
+Privacy note: local test data includes profile text, answer audio, transcripts, and improvement suggestions. With `GEMINI_API_KEY` configured, job details, profile text, question text, and answer audio are sent from the backend to Gemini for analysis. With an empty key, audio stays local and mock analysis text is used.
 
 ## Local Checks
 

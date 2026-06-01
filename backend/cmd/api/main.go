@@ -40,8 +40,10 @@ func main() {
 	answerRepository := repository.NewAnswerRepository(pool)
 	audioStorage := storage.NewLocalAudioStorage("storage/audio")
 	questionGenerator := questionGeneratorForConfig(cfg)
+	answerAnalyzer := answerAnalyzerForConfig(cfg)
+	answerAnalysisQueue := service.NewBackgroundAnswerAnalysisQueue(context.Background(), answerRepository, answerAnalyzer)
 	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
-	answerService := service.NewAnswerService(audioStorage, answerRepository)
+	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
 	interviewHandler := handler.NewInterviewHandler(interviewService, answerService)
 
 	slog.Info("starting interview-ai backend", "addr", ":8080")
@@ -62,6 +64,20 @@ func questionGeneratorForConfig(cfg config.Config) llm.QuestionGenerator {
 		APIKey:        cfg.GeminiAPIKey,
 		Model:         cfg.GeminiModel,
 		FallbackModel: cfg.GeminiFallbackModel,
+	})
+}
+
+func answerAnalyzerForConfig(cfg config.Config) service.AnswerAnalyzer {
+	if cfg.GeminiAPIKey == "" {
+		slog.Info("using mock answer analyzer", "reason", "GEMINI_API_KEY not configured")
+		return llm.MockAnswerAnalyzer{}
+	}
+
+	slog.Info("using Gemini answer analyzer", "model", cfg.GeminiAnswerModel, "fallback_model", cfg.GeminiAnswerFallbackModel)
+	return llm.NewGeminiAnswerAnalyzer(llm.GeminiAnswerAnalyzerConfig{
+		APIKey:        cfg.GeminiAPIKey,
+		Model:         cfg.GeminiAnswerModel,
+		FallbackModel: cfg.GeminiAnswerFallbackModel,
 	})
 }
 

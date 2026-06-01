@@ -33,12 +33,17 @@ type UploadAnswerInput struct {
 }
 
 type AnswerService struct {
-	storage    AudioStorage
-	repository AnswerRepository
+	storage       AudioStorage
+	repository    AnswerRepository
+	analysisQueue AnswerAnalysisQueue
 }
 
-func NewAnswerService(storage AudioStorage, repository AnswerRepository) *AnswerService {
-	return &AnswerService{storage: storage, repository: repository}
+func NewAnswerService(storage AudioStorage, repository AnswerRepository, analysisQueue ...AnswerAnalysisQueue) *AnswerService {
+	var queue AnswerAnalysisQueue
+	if len(analysisQueue) > 0 {
+		queue = analysisQueue[0]
+	}
+	return &AnswerService{storage: storage, repository: repository, analysisQueue: queue}
 }
 
 func (s *AnswerService) UploadAnswer(ctx context.Context, input UploadAnswerInput) (model.UploadAnswerResponse, error) {
@@ -67,14 +72,35 @@ func (s *AnswerService) UploadAnswer(ctx context.Context, input UploadAnswerInpu
 		return model.UploadAnswerResponse{}, err
 	}
 
+	if answer.AnalysisStatus == "" {
+		answer.AnalysisStatus = model.AnswerAnalysisStatusPending
+	}
+
+	if s.analysisQueue != nil && answer.AudioPath != nil {
+		s.analysisQueue.Enqueue(AnswerAnalysisJob{
+			AnswerID:      answer.ID,
+			InterviewID:   answer.InterviewID,
+			QuestionID:    answer.QuestionID,
+			AudioPath:     *answer.AudioPath,
+			AudioMIMEType: input.ContentType,
+		})
+	}
+
 	response := model.UploadAnswerResponse{
-		ID:             answer.ID,
-		InterviewID:    answer.InterviewID,
-		QuestionID:     answer.QuestionID,
-		TranscriptText: answer.TranscriptText,
+		ID:                     answer.ID,
+		InterviewID:            answer.InterviewID,
+		QuestionID:             answer.QuestionID,
+		TranscriptText:         answer.TranscriptText,
+		AnalysisStatus:         answer.AnalysisStatus,
+		ImprovementSuggestions: answer.ImprovementSuggestions,
+		AnalysisError:          answer.AnalysisError,
 	}
 	if answer.AudioPath != nil {
 		response.AudioPath = *answer.AudioPath
+	}
+	if answer.AnalyzedAt != nil {
+		analyzedAt := answer.AnalyzedAt.Format("2006-01-02T15:04:05Z07:00")
+		response.AnalyzedAt = &analyzedAt
 	}
 
 	return response, nil

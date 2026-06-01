@@ -176,7 +176,17 @@ func (r *InterviewRepository) GetByID(ctx context.Context, interviewID string) (
 	}
 
 	answerRows, err := r.pool.Query(ctx, `
-		SELECT id, interview_id, question_id, audio_path, transcript_text, created_at
+		SELECT
+			id,
+			interview_id,
+			question_id,
+			audio_path,
+			transcript_text,
+			analysis_status,
+			improvement_suggestions,
+			analysis_error,
+			analyzed_at,
+			created_at
 		FROM answers
 		WHERE interview_id = $1
 		ORDER BY created_at
@@ -195,6 +205,10 @@ func (r *InterviewRepository) GetByID(ctx context.Context, interviewID string) (
 			&answer.QuestionID,
 			&answer.AudioPath,
 			&answer.TranscriptText,
+			&answer.AnalysisStatus,
+			&answer.ImprovementSuggestions,
+			&answer.AnalysisError,
+			&answer.AnalyzedAt,
 			&answer.CreatedAt,
 		); err != nil {
 			return model.InterviewDetail{}, err

@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:8080`
 
-This API set covers the completed MVP v1 core flow: create an interview, generate questions, start the interview, upload answer audio, complete the interview, and serve uploaded answer audio for the result page.
+This API set covers the completed MVP v1 core flow and the post-MVP answer analysis flow: create an interview, generate questions, start the interview, upload answer audio, complete the interview, analyze uploaded answers in the background, and serve uploaded answer audio for the result page.
 
 ## Health Check
 
@@ -107,11 +107,30 @@ Success response:
   "question_language": "zh-TW",
   "status": "questions_ready",
   "questions": [],
-  "answers": []
+  "answers": [
+    {
+      "id": "answer_uuid",
+      "question_id": "question_uuid",
+      "audio_path": "storage/audio/interview_uuid/question_uuid.webm",
+      "transcript_text": null,
+      "analysis_status": "pending",
+      "improvement_suggestions": null,
+      "analysis_error": null,
+      "analyzed_at": null,
+      "created_at": "2026-05-27T06:30:04Z"
+    }
+  ]
 }
 ```
 
 `questions` is intentionally empty until the interview status is `in_progress` or `completed`.
+
+Answer analysis statuses:
+
+- `pending`: answer audio was saved and analysis is queued.
+- `processing`: the background worker is sending the audio to the configured analyzer.
+- `completed`: `transcript_text` and `improvement_suggestions` are available.
+- `failed`: analysis failed; `analysis_error` contains a short diagnostic message.
 
 Errors:
 
@@ -173,7 +192,11 @@ Success response:
   "interview_id": "interview_uuid",
   "question_id": "question_uuid",
   "audio_path": "storage/audio/interview_uuid/question_uuid.webm",
-  "transcript_text": null
+  "transcript_text": null,
+  "analysis_status": "pending",
+  "improvement_suggestions": null,
+  "analysis_error": null,
+  "analyzed_at": null
 }
 ```
 
@@ -181,6 +204,9 @@ Completion behavior:
 
 - After each successful upload, the backend checks whether every question in the interview has an answer.
 - When all questions have answers, `GET /api/interviews/{interview_id}` returns `"status":"completed"`.
+- Answer analysis runs in the backend background worker after the upload response. Poll `GET /api/interviews/{interview_id}` to observe `analysis_status` changes and read completed transcript/suggestions.
+- If `GEMINI_API_KEY` is empty, the backend uses mock answer analysis. If it is set, the backend sends the saved WebM audio plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini using `GEMINI_ANSWER_MODEL` and `GEMINI_ANSWER_FALLBACK_MODEL` when configured.
+- Gemini answer analysis treats the job description and user profile as background data only; they must not change the required JSON response shape.
 
 Errors:
 

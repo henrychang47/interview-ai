@@ -176,6 +176,120 @@ func TestUpsertAnswerRejectsQuestionOutsideInterview(t *testing.T) {
 	}
 }
 
+func TestGetAnswerAnalysisContextReturnsInterviewAndQuestionContext(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	interviewRepository := NewInterviewRepository(pool)
+	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go、PostgreSQL、REST API",
+		UserProfile:    "有 Java 和 Go 學習經驗",
+		QuestionCount:  1,
+	}, []llm.GeneratedQuestion{{Order: 1, Text: "請介紹你做過的 Go API 專案。"}})
+	if err != nil {
+		t.Fatalf("CreateWithQuestions returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
+	})
+
+	var questionID string
+	if err := pool.QueryRow(ctx, `
+		SELECT id
+		FROM questions
+		WHERE interview_id = $1 AND question_order = 1
+	`, created.ID).Scan(&questionID); err != nil {
+		t.Fatalf("query question id: %v", err)
+	}
+
+	repository := NewAnswerRepository(pool)
+	analysisContext, err := repository.GetAnswerAnalysisContext(ctx, created.ID, questionID)
+	if err != nil {
+		t.Fatalf("GetAnswerAnalysisContext returned error: %v", err)
+	}
+
+	if analysisContext.JobTitle != "後端工程師" {
+		t.Fatalf("expected job title, got %q", analysisContext.JobTitle)
+	}
+	if analysisContext.JobDescription != "需要熟悉 Go、PostgreSQL、REST API" {
+		t.Fatalf("expected job description, got %q", analysisContext.JobDescription)
+	}
+	if analysisContext.UserProfile != "有 Java 和 Go 學習經驗" {
+		t.Fatalf("expected user profile, got %q", analysisContext.UserProfile)
+	}
+	if analysisContext.QuestionText != "請介紹你做過的 Go API 專案。" {
+		t.Fatalf("expected question text, got %q", analysisContext.QuestionText)
+	}
+}
+
+func TestGetAnswerAnalysisContextRejectsQuestionOutsideInterview(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	interviewRepository := NewInterviewRepository(pool)
+	first, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  1,
+	}, []llm.GeneratedQuestion{{Order: 1, Text: "第一場問題"}})
+	if err != nil {
+		t.Fatalf("create first interview: %v", err)
+	}
+	second, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "前端工程師",
+		JobDescription: "需要熟悉 React",
+		UserProfile:    "有 React 學習經驗",
+		QuestionCount:  1,
+	}, []llm.GeneratedQuestion{{Order: 1, Text: "第二場問題"}})
+	if err != nil {
+		t.Fatalf("create second interview: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", first.ID)
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", second.ID)
+	})
+
+	var secondQuestionID string
+	if err := pool.QueryRow(ctx, `
+		SELECT id
+		FROM questions
+		WHERE interview_id = $1 AND question_order = 1
+	`, second.ID).Scan(&secondQuestionID); err != nil {
+		t.Fatalf("query second question id: %v", err)
+	}
+
+	repository := NewAnswerRepository(pool)
+	_, err = repository.GetAnswerAnalysisContext(ctx, first.ID, secondQuestionID)
+
+	if !errors.Is(err, service.ErrQuestionNotFoundForInterview) {
+		t.Fatalf("expected ErrQuestionNotFoundForInterview, got %v", err)
+	}
+}
+
 func TestCompleteInterviewIfAllQuestionsAnsweredKeepsInterviewOpenBeforeFinalAnswer(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
