@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { getInterview } from '../api/interviews'
 import { MarkdownText } from '../components/MarkdownText'
-import { Card, Icon, PageShell, StatusBadge, TopBar } from '../components/ui'
+import { Card, Icon, InfoDisclosure, PageShell, StatusBadge, TopBar } from '../components/ui'
 import type { Answer, InterviewDetail } from '../types/interview'
 
 type InterviewResultPageProps = {
@@ -110,19 +110,14 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
               <h2 className="mt-md font-headline text-headline-md text-on-surface">
                 {interview.job_title}
               </h2>
-              <p className="mt-sm max-w-3xl text-body-md leading-7 text-on-surface-variant">
-                {interview.job_description}
-              </p>
             </div>
             <StatusBadge tone="primary">{interview.status}</StatusBadge>
           </div>
 
-          <Card className="mb-xl p-md md:p-lg">
-            <p className="text-label-md font-bold text-on-surface">個人資訊</p>
-            <p className="mt-sm text-body-md leading-7 text-on-surface-variant">
-              {interview.user_profile}
-            </p>
-          </Card>
+          <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-2">
+            <InfoDisclosure title="職位資訊">{interview.job_description}</InfoDisclosure>
+            <InfoDisclosure title="個人資訊">{interview.user_profile}</InfoDisclosure>
+          </div>
 
           <section>
             <h3 className="mb-md font-headline text-headline-md text-on-surface">面試問答回顧</h3>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { getInterview, startInterview } from '../api/interviews'
-import { Button, Card, Icon, LinkButton, PageShell, StatusBadge, TopBar } from '../components/ui'
+import { Button, Card, Icon, InfoDisclosure, LinkButton, PageShell, StatusBadge, TopBar } from '../components/ui'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewDetailPageProps = {
@@ -95,11 +95,13 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
               <h1 className="mt-sm font-headline text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
                 {interview.job_title}
               </h1>
-              <p className="mt-sm max-w-3xl text-body-md text-on-surface-variant">
-                {interview.job_description}
-              </p>
             </div>
             <StatusBadge tone="primary">{interview.status}</StatusBadge>
+          </div>
+
+          <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-2">
+            <InfoDisclosure title="職位資訊">{interview.job_description}</InfoDisclosure>
+            <InfoDisclosure title="個人資訊">{interview.user_profile}</InfoDisclosure>
           </div>
 
           {interview.status === 'generating_questions' ? (

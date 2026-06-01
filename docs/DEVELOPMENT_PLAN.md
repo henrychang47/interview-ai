@@ -390,6 +390,30 @@ Verification:
 - `docker compose run --rm migrate` applied migration version 4.
 - `docker compose exec -T postgres psql -U interview_ai -d interview_ai -c "\d llm_call_logs"` confirmed the table, token columns, indexes, and nullable foreign keys.
 
+## Interview Info Modal Display
+
+Completed on 2026-06-01.
+
+Implemented:
+
+- Updated the preparation/detail page and result page to show job information and user profile through modal dialogs.
+- Kept both sections hidden by default until the user clicks `職位資訊` or `個人資訊`.
+- Added a `關閉` button and background-click dismissal for each modal.
+- Preserved line breaks and allowed long text to wrap inside the modal body.
+
+Verification:
+
+- `npm test -- App.test.tsx -t "starts a ready interview|loads the completed interview result page"` passed in `frontend`.
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
+Manual verification:
+
+- Open an interview preparation/detail page and confirm `職位資訊` and `個人資訊` do not show their full text by default.
+- Click each section and confirm a modal opens with the multi-line content preserving line breaks and wrapping within the modal.
+- Confirm the modal closes with the `關閉` button.
+- Open the result page and confirm clicking outside the modal closes it.
+
 ## Next Step
 
 Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.

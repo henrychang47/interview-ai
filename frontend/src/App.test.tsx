@@ -17,6 +17,12 @@ function mockFetchOnce(response: unknown, init: ResponseInit = {}) {
   )
 }
 
+function findElementByExactText(text: string) {
+  return screen.getByText(
+    (_, element) => element?.tagName.toLowerCase() === 'p' && element.textContent === text,
+  )
+}
+
 type MockUtterance = {
   text: string
   lang: string
@@ -136,7 +142,7 @@ describe('App', () => {
   it('renders the interview practice homepage', () => {
     render(<App />)
 
-    expect(screen.getByRole('link', { name: 'Mock Interview' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'AI模擬面試' })).toHaveAttribute('href', '/')
     expect(
       screen.getByRole('heading', {
         name: '提升您的面試表現，隨時隨地與 AI 導師練習',
@@ -156,7 +162,7 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('link', { name: 'Mock Interview' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'AI模擬面試' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: '返回首頁' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('heading', { name: '建立新面試' })).toBeInTheDocument()
     expect(screen.getByLabelText('職位名稱')).toBeInTheDocument()
@@ -358,6 +364,8 @@ describe('App', () => {
 
   it('starts a ready interview from the preparation page', async () => {
     mockPathname('/interviews/interview-123')
+    const jobDescription = '需要熟悉 Go、PostgreSQL、REST API\n能設計可維護的服務'
+    const userProfile = '有 Java 和 Go 學習經驗\n正在準備後端工程師面試'
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -365,8 +373,8 @@ describe('App', () => {
           JSON.stringify({
             id: 'interview-123',
             job_title: '後端工程師',
-            job_description: '需要熟悉 Go、PostgreSQL、REST API',
-            user_profile: '有 Java 和 Go 學習經驗',
+            job_description: jobDescription,
+            user_profile: userProfile,
             question_count: 2,
             question_language: 'zh-TW',
             status: 'questions_ready',
@@ -388,6 +396,23 @@ describe('App', () => {
 
     expect(await screen.findByText('題目已準備完成')).toBeInTheDocument()
     expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
+    expect(screen.queryByText(jobDescription)).not.toBeInTheDocument()
+    expect(screen.queryByText(userProfile)).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '職位資訊' }))
+
+    expect(screen.getByRole('dialog', { name: '職位資訊' })).toBeInTheDocument()
+    expect(findElementByExactText(jobDescription)).toHaveClass('whitespace-pre-wrap', 'break-words')
+    expect(screen.queryByText(userProfile)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '個人資訊' }))
+    expect(screen.getByRole('dialog', { name: '個人資訊' })).toBeInTheDocument()
+    expect(findElementByExactText(userProfile)).toHaveClass('whitespace-pre-wrap', 'break-words')
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }))
     fireEvent.click(screen.getByRole('button', { name: '開始模擬面試' }))
 
     await waitFor(() =>
@@ -552,13 +577,15 @@ describe('App', () => {
 
   it('loads the completed interview result page with playable answers', async () => {
     mockPathname('/interviews/interview-123/result')
+    const jobDescription = '需要熟悉 Go、PostgreSQL、REST API\n能設計可維護的服務'
+    const userProfile = '有 Java 和 Go 學習經驗\n正在準備後端工程師面試'
     vi.stubGlobal(
       'fetch',
       mockFetchOnce({
         id: 'interview-123',
         job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
+        job_description: jobDescription,
+        user_profile: userProfile,
         question_count: 2,
         status: 'completed',
         questions: [
@@ -596,9 +623,23 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: '面試結果' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '後端工程師' })).toBeInTheDocument()
-    expect(screen.getByText('需要熟悉 Go、PostgreSQL、REST API')).toBeInTheDocument()
-    expect(screen.getByText('有 Java 和 Go 學習經驗')).toBeInTheDocument()
     expect(screen.getByText('completed')).toBeInTheDocument()
+    expect(screen.queryByText(jobDescription)).not.toBeInTheDocument()
+    expect(screen.queryByText(userProfile)).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '職位資訊' }))
+
+    expect(screen.getByRole('dialog', { name: '職位資訊' })).toBeInTheDocument()
+    expect(findElementByExactText(jobDescription)).toHaveClass('whitespace-pre-wrap', 'break-words')
+    fireEvent.mouseDown(screen.getByTestId('info-modal-backdrop'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '個人資訊' }))
+    expect(screen.getByRole('dialog', { name: '個人資訊' })).toBeInTheDocument()
+    expect(findElementByExactText(userProfile)).toHaveClass('whitespace-pre-wrap', 'break-words')
+    fireEvent.mouseDown(screen.getByTestId('info-modal-backdrop'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('請介紹你過去與後端開發相關的經驗。')).toBeInTheDocument()
     expect(screen.getByText('你如何設計一個 REST API？')).toBeInTheDocument()
     expect(screen.getByText('AI 分析中')).toBeInTheDocument()

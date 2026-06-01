@@ -1,4 +1,11 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
+import {
+  useId,
+  useState,
+  type AnchorHTMLAttributes,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type ReactNode,
+} from 'react'
 
 type IconProps = {
   name: string
@@ -142,6 +149,76 @@ export function StatusBadge({
     >
       {children}
     </span>
+  )
+}
+
+export function InfoDisclosure({
+  title,
+  children,
+  className = '',
+}: {
+  title: string
+  children: ReactNode
+  className?: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const titleID = useId()
+
+  function closeModal() {
+    setIsOpen(false)
+  }
+
+  return (
+    <>
+      <Card className={`overflow-hidden ${className}`}>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          onClick={() => setIsOpen(true)}
+          className="flex min-h-14 w-full items-center justify-between gap-md px-md py-sm text-left text-label-md font-bold text-on-surface hover:bg-surface-container-low md:px-lg"
+        >
+          <span>{title}</span>
+          <Icon name="open_in_full" className="shrink-0 text-[22px] text-on-surface-variant" />
+        </button>
+      </Card>
+      {isOpen ? (
+        <div
+          data-testid="info-modal-backdrop"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-md"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeModal()
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleID}
+            className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-calm-lg"
+          >
+            <div className="flex items-center justify-between gap-md border-b border-outline-variant px-md py-sm md:px-lg">
+              <h2 id={titleID} className="font-headline text-headline-sm text-on-surface">
+                {title}
+              </h2>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="inline-flex min-h-10 items-center justify-center gap-xs rounded-lg px-sm py-xs text-label-md font-bold text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+              >
+                <Icon name="close" className="text-[18px]" />
+                關閉
+              </button>
+            </div>
+            <div className="max-h-[calc(80vh-4rem)] overflow-y-auto px-md py-md md:px-lg">
+              <p className="whitespace-pre-wrap break-words text-body-md leading-7 text-on-surface-variant">
+                {children}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }
 
