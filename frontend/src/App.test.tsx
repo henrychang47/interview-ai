@@ -53,18 +53,36 @@ function deferredResponse(response: Response) {
 type MockUtterance = {
   text: string
   lang: string
+  voice: SpeechSynthesisVoice | null
+  rate: number
+  pitch: number
   onend: (() => void) | null
   onerror: (() => void) | null
 }
 
-function installSpeechSynthesisMock() {
+function createSpeechVoice(language: string, name = language) {
+  return {
+    default: false,
+    lang: language,
+    localService: true,
+    name,
+    voiceURI: name,
+  } as SpeechSynthesisVoice
+}
+
+function installSpeechSynthesisMock(initialVoices: SpeechSynthesisVoice[] = []) {
   const speak = vi.fn()
   const cancel = vi.fn()
   const utterances: MockUtterance[] = []
+  const listeners = new Set<() => void>()
+  let voices = initialVoices
 
   class MockSpeechSynthesisUtterance {
     text: string
     lang = ''
+    voice: SpeechSynthesisVoice | null = null
+    rate = 1
+    pitch = 1
     onend: (() => void) | null = null
     onerror: (() => void) | null = null
 
@@ -77,10 +95,29 @@ function installSpeechSynthesisMock() {
   vi.stubGlobal('speechSynthesis', {
     speak,
     cancel,
+    getVoices: vi.fn(() => voices),
+    addEventListener: vi.fn((eventName: string, listener: () => void) => {
+      if (eventName === 'voiceschanged') {
+        listeners.add(listener)
+      }
+    }),
+    removeEventListener: vi.fn((eventName: string, listener: () => void) => {
+      if (eventName === 'voiceschanged') {
+        listeners.delete(listener)
+      }
+    }),
   })
   vi.stubGlobal('SpeechSynthesisUtterance', MockSpeechSynthesisUtterance)
 
-  return { speak, cancel, utterances }
+  return {
+    speak,
+    cancel,
+    utterances,
+    setVoices: (nextVoices: SpeechSynthesisVoice[]) => {
+      voices = nextVoices
+      listeners.forEach((listener) => listener())
+    },
+  }
 }
 
 type MockMediaRecorderInstance = {
@@ -512,7 +549,12 @@ describe('App', () => {
   })
 
   it('automatically plays the first question and starts recording after playback ends', async () => {
-    const speech = installSpeechSynthesisMock()
+    const googleTaiwanMandarinVoice = createSpeechVoice('zh-TW', 'Google 國語（臺灣）')
+    const speech = installSpeechSynthesisMock([
+      createSpeechVoice('en-US', 'US English'),
+      createSpeechVoice('zh-TW', 'Taiwan Mandarin'),
+      googleTaiwanMandarinVoice,
+    ])
     const media = installMediaRecorderMock()
     installObjectURLMock()
     mockPathname('/interviews/interview-123/session')
@@ -537,12 +579,49 @@ describe('App', () => {
     expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
     expect(speech.speak).toHaveBeenCalledTimes(1)
     expect(speech.utterances[0].lang).toBe('zh-TW')
+    expect(speech.utterances[0].voice).toBe(googleTaiwanMandarinVoice)
+    expect(speech.utterances[0].rate).toBe(1.1)
+    expect(speech.utterances[0].pitch).toBe(0.8)
 
     act(() => speech.utterances[0].onend?.())
 
     await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
     expect(screen.getByText('正在錄音')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '回答結束' })).toBeEnabled()
+  })
+
+  it('uses the matching English voice without Chinese speech tuning', async () => {
+    const englishVoice = createSpeechVoice('en-US', 'US English')
+    const speech = installSpeechSynthesisMock([
+      createSpeechVoice('zh-TW', 'Google 國語（臺灣）'),
+      englishVoice,
+    ])
+    installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: 'Backend Engineer',
+        job_description: 'Build APIs',
+        user_profile: 'Go experience',
+        question_count: 1,
+        question_language: 'en-US',
+        status: 'in_progress',
+        questions: [{ id: 'question-1', order: 1, text: 'Tell me about your backend experience.' }],
+        answers: [],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    expect(speech.speak).toHaveBeenCalledTimes(1)
+    expect(speech.utterances[0].lang).toBe('en-US')
+    expect(speech.utterances[0].voice).toBe(englishVoice)
+    expect(speech.utterances[0].rate).toBe(1)
+    expect(speech.utterances[0].pitch).toBe(1)
   })
 
   it('replays the question during recording and discards the current recording', async () => {

@@ -414,6 +414,30 @@ Manual verification:
 - Confirm the modal closes with the `關閉` button.
 - Open the result page and confirm clicking outside the modal closes it.
 
+## Interview Session TTS Voice Selection
+
+Completed on 2026-06-02.
+
+Implemented:
+
+- Updated the interview session page to load browser SpeechSynthesis voices.
+- Selected a matching voice for the interview question language before speaking.
+- Preferred `Google 國語（臺灣）` for Chinese questions, with language-based fallback if that voice is unavailable.
+- Applied Chinese question playback tuning with `rate: 1.1` and `pitch: 0.8`.
+- Preserved automatic playback, recording handoff, and speech cancellation behavior.
+
+Verification:
+
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
+Manual verification:
+
+- Create or open an interview using `question_language: zh-TW`.
+- Start the session page and confirm the first question is spoken with `Google 國語（臺灣）` when the browser provides it.
+- Confirm Chinese playback uses rate `1.1` and pitch `0.8`.
+- Repeat with `question_language: en-US` and confirm English questions still use an English voice when available.
+
 ## Next Step
 
 Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.

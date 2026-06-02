@@ -52,6 +52,31 @@ function navigateTo(path: string) {
 const maxRecordingSeconds = Number(import.meta.env.VITE_MAX_ANSWER_RECORDING_SECONDS ?? 180)
 const safeMaxRecordingSeconds =
   Number.isFinite(maxRecordingSeconds) && maxRecordingSeconds > 0 ? maxRecordingSeconds : 180
+const preferredChineseVoiceName = 'Google 國語（臺灣）'
+const preferredChineseSpeechRate = 1.1
+const preferredChineseSpeechPitch = 0.8
+
+function normalizeLanguageTag(language: string) {
+  return language.trim().toLowerCase().replace(/_/g, '-')
+}
+
+function isChineseLanguage(language: string) {
+  return normalizeLanguageTag(language).split('-')[0] === 'zh'
+}
+
+function findSpeechVoice(voices: SpeechSynthesisVoice[], preferredLanguage: string) {
+  const normalizedPreferredLanguage = normalizeLanguageTag(preferredLanguage || 'zh-TW')
+  const preferredLanguageFamily = normalizedPreferredLanguage.split('-')[0]
+
+  return (
+    (preferredLanguageFamily === 'zh'
+      ? voices.find((voice) => voice.name === preferredChineseVoiceName)
+      : undefined) ??
+    voices.find((voice) => normalizeLanguageTag(voice.lang) === normalizedPreferredLanguage) ??
+    voices.find((voice) => normalizeLanguageTag(voice.lang).split('-')[0] === preferredLanguageFamily) ??
+    null
+  )
+}
 
 export default function InterviewSessionPage({ interviewID }: InterviewSessionPageProps) {
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
@@ -61,6 +86,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const [recordingError, setRecordingError] = useState<string | null>(null)
   const [secondsRemaining, setSecondsRemaining] = useState(safeMaxRecordingSeconds)
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
+  const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([])
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
@@ -146,7 +172,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
       mediaStreamRef.current = stream
       const recorderOptions =
         typeof MediaRecorder.isTypeSupported === 'function' &&
-        MediaRecorder.isTypeSupported('audio/webm')
+          MediaRecorder.isTypeSupported('audio/webm')
           ? { mimeType: 'audio/webm' }
           : undefined
       const recorder = new MediaRecorder(stream, recorderOptions)
@@ -163,7 +189,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
         recordedChunksRef.current = []
         stopMediaStream()
 
-      if (shouldDiscard) {
+        if (shouldDiscard) {
           autoPlayKeyRef.current = null
           setPhase('playing_question')
           return
@@ -191,8 +217,15 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     stopQuestionPlayback()
     setPhase('playing_question')
 
+    const questionLanguage = interview.question_language || 'zh-TW'
+    const availableVoices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices()
     const utterance = new SpeechSynthesisUtterance(currentQuestion.text)
-    utterance.lang = interview.question_language || 'zh-TW'
+    utterance.lang = questionLanguage
+    utterance.voice = findSpeechVoice(availableVoices, questionLanguage)
+    if (isChineseLanguage(questionLanguage)) {
+      utterance.rate = preferredChineseSpeechRate
+      utterance.pitch = preferredChineseSpeechPitch
+    }
     utterance.onend = () => {
       void startAnswerRecording()
     }
@@ -201,7 +234,25 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     }
 
     window.speechSynthesis.speak(utterance)
-  }, [canSpeakQuestion, currentQuestion, interview, startAnswerRecording, stopQuestionPlayback])
+  }, [canSpeakQuestion, currentQuestion, interview, speechVoices, startAnswerRecording, stopQuestionPlayback])
+
+  useEffect(() => {
+    if (!canSpeakQuestion) {
+      setSpeechVoices([])
+      return
+    }
+
+    const updateSpeechVoices = () => {
+      setSpeechVoices(window.speechSynthesis.getVoices())
+    }
+
+    updateSpeechVoices()
+    window.speechSynthesis.addEventListener('voiceschanged', updateSpeechVoices)
+
+    return () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', updateSpeechVoices)
+    }
+  }, [canSpeakQuestion])
 
   useEffect(() => {
     let isMounted = true
@@ -299,10 +350,10 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           items.map((item) =>
             item.questionID === itemToUpload.questionID
               ? {
-                  ...item,
-                  status: item.attempts + 1 >= 3 ? 'failed' : 'queued',
-                  error: error instanceof Error ? error.message : '上傳回答失敗',
-                }
+                ...item,
+                status: item.attempts + 1 >= 3 ? 'failed' : 'queued',
+                error: error instanceof Error ? error.message : '上傳回答失敗',
+              }
               : item,
           ),
         )
