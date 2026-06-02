@@ -133,9 +133,9 @@ $env:VITE_MAX_ANSWER_RECORDING_SECONDS='180'
 
 ## Gemini and Mock AI Modes
 
-By default, the backend uses mock question generation and mock answer analysis when `GEMINI_API_KEY` is empty.
+By default, the backend uses mock question generation and mock answer analysis when `GEMINI_API_KEY` is empty. Question playback falls back to browser `SpeechSynthesis` when Gemini TTS is not configured or unavailable.
 
-To enable Gemini-backed question generation and answer audio analysis:
+To enable Gemini-backed question generation, question TTS playback, and answer audio analysis:
 
 ```powershell
 $env:GEMINI_API_KEY='<your_api_key>'
@@ -143,16 +143,19 @@ $env:GEMINI_MODEL='gemini-2.5-flash'
 $env:GEMINI_FALLBACK_MODEL='gemini-2.5-flash-lite'
 $env:GEMINI_ANSWER_MODEL='gemini-2.5-flash'
 $env:GEMINI_ANSWER_FALLBACK_MODEL='gemini-2.5-flash-lite'
+$env:GEMINI_TTS_MODEL='gemini-3.1-flash-tts-preview'
+$env:GEMINI_TTS_FALLBACK_MODEL='gemini-2.5-flash-preview-tts'
+$env:GEMINI_TTS_VOICE='Kore'
 docker compose up --build -d backend frontend
 ```
 
 Never commit real API keys. Keep local secrets in `.env`.
 
-When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. After each answer upload, a background worker sends the saved WebM audio file plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini to generate `transcript_text` and context-aware `improvement_suggestions`. Empty `GEMINI_ANSWER_MODEL` values reuse the question-generation model settings.
+When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. During the session, the frontend first requests `POST /api/interviews/{interview_id}/questions/{question_id}/tts`; the backend sends only the question text to Gemini TTS, wraps the returned PCM audio as WAV, and does not save the generated question audio. After each answer upload, a background worker sends the saved WebM audio file plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini to generate `transcript_text` and context-aware `improvement_suggestions`. Empty `GEMINI_ANSWER_MODEL` values reuse the question-generation model settings.
 
 Transient Gemini `429` / `RESOURCE_EXHAUSTED` and `503` / `UNAVAILABLE` responses are retried for question generation before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
 
-Privacy note: local test data includes profile text, answer audio, transcripts, and improvement suggestions. With `GEMINI_API_KEY` configured, job details, profile text, question text, and answer audio are sent from the backend to Gemini for analysis. With an empty key, audio stays local and mock analysis text is used.
+Privacy note: local test data includes profile text, answer audio, transcripts, and improvement suggestions. With `GEMINI_API_KEY` configured, job details and profile text are sent from the backend to Gemini for question generation, question text is sent for TTS playback and answer analysis, and answer audio is sent for analysis. With an empty key, answer audio stays local, mock analysis text is used, and question playback uses browser TTS.
 
 ## Local Checks
 

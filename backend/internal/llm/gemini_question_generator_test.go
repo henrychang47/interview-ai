@@ -35,7 +35,7 @@ func TestGeminiQuestionGeneratorCreatesGenAIClientOnceAndReusesIt(t *testing.T) 
 		Backoff:       noBackoff,
 	})
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := generator.GenerateQuestions(context.Background(), GenerateQuestionsInput{
 			JobTitle:       "後端工程師",
 			JobDescription: "需要熟悉 Go",
@@ -456,7 +456,13 @@ func (f *fakeGeminiModels) GenerateContent(ctx context.Context, model string, co
 		return nil, result.err
 	}
 	if result.inputTokens != 0 || result.outputTokens != 0 || result.totalTokens != 0 {
+		if len(result.audioBytes) > 0 {
+			return genAIAudioResponseWithUsage(result), nil
+		}
 		return genAITextResponseWithUsage(result), nil
+	}
+	if len(result.audioBytes) > 0 {
+		return genAIAudioResponse(result.audioBytes), nil
 	}
 	return genAITextResponse(result.text), nil
 }
@@ -473,6 +479,7 @@ type fakeGeminiResult struct {
 	inputTokens  int32
 	outputTokens int32
 	totalTokens  int32
+	audioBytes   []byte
 }
 
 func genAITextResponse(text string) *genai.GenerateContentResponse {
@@ -487,6 +494,30 @@ func genAITextResponse(text string) *genai.GenerateContentResponse {
 
 func genAITextResponseWithUsage(result fakeGeminiResult) *genai.GenerateContentResponse {
 	response := genAITextResponse(result.text)
+	response.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
+		PromptTokenCount:     result.inputTokens,
+		CandidatesTokenCount: result.outputTokens,
+		TotalTokenCount:      result.totalTokens,
+	}
+	return response
+}
+
+func genAIAudioResponse(audioBytes []byte) *genai.GenerateContentResponse {
+	return &genai.GenerateContentResponse{
+		Candidates: []*genai.Candidate{
+			{
+				Content: &genai.Content{
+					Parts: []*genai.Part{
+						{InlineData: &genai.Blob{Data: audioBytes, MIMEType: "audio/pcm"}},
+					},
+				},
+			},
+		},
+	}
+}
+
+func genAIAudioResponseWithUsage(result fakeGeminiResult) *genai.GenerateContentResponse {
+	response := genAIAudioResponse(result.audioBytes)
 	response.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
 		PromptTokenCount:     result.inputTokens,
 		CandidatesTokenCount: result.outputTokens,

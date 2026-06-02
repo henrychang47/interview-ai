@@ -17,6 +17,9 @@ type Config struct {
 	GeminiFallbackModel       string
 	GeminiAnswerModel         string
 	GeminiAnswerFallbackModel string
+	GeminiTTSModel            string
+	GeminiTTSFallbackModel    string
+	GeminiTTSVoice            string
 }
 
 func Load() (Config, error) {
@@ -48,6 +51,18 @@ func Load() (Config, error) {
 	geminiAnswerFallbackModel := strings.TrimSpace(os.Getenv("GEMINI_ANSWER_FALLBACK_MODEL"))
 	if geminiAnswerFallbackModel == "" {
 		geminiAnswerFallbackModel = geminiFallbackModel
+	}
+	geminiTTSModel := strings.TrimSpace(os.Getenv("GEMINI_TTS_MODEL"))
+	if geminiTTSModel == "" {
+		geminiTTSModel = "gemini-3.1-flash-tts-preview"
+	}
+	geminiTTSFallbackModel := strings.TrimSpace(os.Getenv("GEMINI_TTS_FALLBACK_MODEL"))
+	if geminiTTSFallbackModel == "" {
+		geminiTTSFallbackModel = "gemini-2.5-flash-preview-tts"
+	}
+	geminiTTSVoice := strings.TrimSpace(os.Getenv("GEMINI_TTS_VOICE"))
+	if geminiTTSVoice == "" {
+		geminiTTSVoice = "Kore"
 	}
 
 	if postgresHost == "" {
@@ -86,6 +101,9 @@ func Load() (Config, error) {
 		GeminiFallbackModel:       geminiFallbackModel,
 		GeminiAnswerModel:         geminiAnswerModel,
 		GeminiAnswerFallbackModel: geminiAnswerFallbackModel,
+		GeminiTTSModel:            geminiTTSModel,
+		GeminiTTSFallbackModel:    geminiTTSFallbackModel,
+		GeminiTTSVoice:            geminiTTSVoice,
 	}, nil
 }
 

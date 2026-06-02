@@ -171,6 +171,50 @@ func TestStartInterviewReturnsNotReady(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusConflict, "interview is not ready to start")
 }
 
+func TestGenerateQuestionTTSReturnsWAVAudio(t *testing.T) {
+	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+		audio: []byte("wav-bytes"),
+	})
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	if response.Header().Get("Content-Type") != "audio/wav" {
+		t.Fatalf("expected audio/wav content type, got %q", response.Header().Get("Content-Type"))
+	}
+	if response.Body.String() != "wav-bytes" {
+		t.Fatalf("expected audio response body, got %q", response.Body.String())
+	}
+}
+
+func TestGenerateQuestionTTSReturnsUnavailableForFallback(t *testing.T) {
+	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+		err: service.ErrQuestionTTSUnavailable,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusServiceUnavailable, "question TTS is unavailable")
+}
+
+func TestGenerateQuestionTTSReturnsMissingQuestion(t *testing.T) {
+	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+		err: service.ErrQuestionNotFoundForInterview,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusNotFound, "question not found for interview")
+}
+
 func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, status int, message string) {
 	t.Helper()
 	if response.Code != status {
@@ -204,4 +248,16 @@ func (s *stubInterviewService) GetInterview(ctx context.Context, interviewID str
 
 func (s *stubInterviewService) StartInterview(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error) {
 	return s.startResponse, s.startErr
+}
+
+type stubQuestionTTSService struct {
+	audio []byte
+	err   error
+}
+
+func (s *stubQuestionTTSService) GenerateQuestionSpeech(ctx context.Context, interviewID string, questionID string) ([]byte, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.audio, nil
 }

@@ -11,6 +11,7 @@ import (
 	"interview-ai/backend/internal/config"
 	"interview-ai/backend/internal/handler"
 	"interview-ai/backend/internal/llm"
+	"interview-ai/backend/internal/model"
 	"interview-ai/backend/internal/repository"
 	"interview-ai/backend/internal/service"
 	"interview-ai/backend/internal/storage"
@@ -41,11 +42,13 @@ func main() {
 	llmCallLogRepository := repository.NewLLMCallLogRepository(pool)
 	audioStorage := storage.NewLocalAudioStorage("storage/audio")
 	questionGenerator := questionGeneratorForConfig(cfg, llmCallLogRepository)
+	questionTTSGenerator := questionTTSGeneratorForConfig(cfg, llmCallLogRepository)
 	answerAnalyzer := answerAnalyzerForConfig(cfg, llmCallLogRepository)
 	answerAnalysisQueue := service.NewBackgroundAnswerAnalysisQueue(context.Background(), answerRepository, answerAnalyzer)
 	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
+	questionTTSService := service.NewQuestionTTSService(interviewRepository, questionTTSGenerator)
 	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
-	interviewHandler := handler.NewInterviewHandler(interviewService, answerService)
+	interviewHandler := handler.NewInterviewHandlerWithTTS(interviewService, answerService, questionTTSService)
 
 	slog.Info("starting interview-ai backend", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", newRouter(interviewHandler, "storage/audio")); err != nil {
@@ -82,6 +85,28 @@ func answerAnalyzerForConfig(cfg config.Config, logger llm.CallLogger) service.A
 		FallbackModel: cfg.GeminiAnswerFallbackModel,
 		Logger:        logger,
 	})
+}
+
+func questionTTSGeneratorForConfig(cfg config.Config, logger llm.CallLogger) service.QuestionTTSGenerator {
+	if cfg.GeminiAPIKey == "" {
+		slog.Info("using unavailable Gemini question TTS", "reason", "GEMINI_API_KEY not configured")
+		return unavailableQuestionTTSGenerator{}
+	}
+
+	slog.Info("using Gemini question TTS", "model", cfg.GeminiTTSModel, "fallback_model", cfg.GeminiTTSFallbackModel, "voice", cfg.GeminiTTSVoice)
+	return llm.NewGeminiQuestionTTSGenerator(llm.GeminiQuestionTTSGeneratorConfig{
+		APIKey:        cfg.GeminiAPIKey,
+		Model:         cfg.GeminiTTSModel,
+		FallbackModel: cfg.GeminiTTSFallbackModel,
+		Voice:         cfg.GeminiTTSVoice,
+		Logger:        logger,
+	})
+}
+
+type unavailableQuestionTTSGenerator struct{}
+
+func (unavailableQuestionTTSGenerator) GenerateQuestionSpeech(ctx context.Context, input model.QuestionTTSInput) ([]byte, error) {
+	return nil, service.ErrQuestionTTSUnavailable
 }
 
 func configureLogger(level string) {

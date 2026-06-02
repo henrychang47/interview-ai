@@ -19,11 +19,22 @@ type InterviewService interface {
 	StartInterview(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error)
 }
 
+type QuestionTTSService interface {
+	GenerateQuestionSpeech(ctx context.Context, interviewID string, questionID string) ([]byte, error)
+}
+
 func NewInterviewHandler(interviewService InterviewService, answerService AnswerService) http.Handler {
+	return NewInterviewHandlerWithTTS(interviewService, answerService, nil)
+}
+
+func NewInterviewHandlerWithTTS(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/", createInterview(interviewService))
 	router.Get("/{interviewID}", getInterview(interviewService))
 	router.Post("/{interviewID}/start", startInterview(interviewService))
+	if questionTTSService != nil {
+		router.Post("/{interviewID}/questions/{questionID}/tts", generateQuestionTTS(questionTTSService))
+	}
 	router.Post("/{interviewID}/questions/{questionID}/answer", uploadAnswer(answerService))
 	return router
 }
@@ -91,6 +102,33 @@ func startInterview(interviewService InterviewService) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func generateQuestionTTS(questionTTSService QuestionTTSService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		interviewID := chi.URLParam(r, "interviewID")
+		questionID := chi.URLParam(r, "questionID")
+		audio, err := questionTTSService.GenerateQuestionSpeech(r.Context(), interviewID, questionID)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrInterviewNotFound),
+				errors.Is(err, service.ErrQuestionNotFoundForInterview):
+				writeError(w, http.StatusNotFound, err.Error())
+			case errors.Is(err, service.ErrQuestionTTSUnavailable):
+				writeError(w, http.StatusServiceUnavailable, service.ErrQuestionTTSUnavailable.Error())
+			default:
+				slog.Error("generate question tts", "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to generate question audio")
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "audio/wav")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write(audio); err != nil {
+			slog.Error("write question tts audio", "error", err)
+		}
 	}
 }
 

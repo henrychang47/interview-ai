@@ -190,6 +190,36 @@ function installObjectURLMock() {
   return { createObjectURL, revokeObjectURL }
 }
 
+type MockAudioInstance = {
+  src: string
+  onended: (() => void) | null
+  onerror: (() => void) | null
+  play: ReturnType<typeof vi.fn>
+  pause: ReturnType<typeof vi.fn>
+}
+
+function installAudioMock() {
+  const instances: MockAudioInstance[] = []
+
+  class MockAudio {
+    src: string
+    onended: (() => void) | null = null
+    onerror: (() => void) | null = null
+
+    constructor(src = '') {
+      this.src = src
+      instances.push(this as unknown as MockAudioInstance)
+    }
+
+    play = vi.fn().mockResolvedValue(undefined)
+    pause = vi.fn()
+  }
+
+  vi.stubGlobal('Audio', MockAudio)
+
+  return { instances }
+}
+
 describe('App', () => {
   beforeEach(() => {
     mockPathname('/')
@@ -558,25 +588,40 @@ describe('App', () => {
     const media = installMediaRecorderMock()
     installObjectURLMock()
     mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go、PostgreSQL、REST API',
-        user_profile: '有 Java 和 Go 學習經驗',
-        question_count: 1,
-        question_language: 'zh-TW',
-        status: 'in_progress',
-        questions: [{ id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' }],
-        answers: [],
-      }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go、PostgreSQL、REST API',
+            user_profile: '有 Java 和 Go 學習經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '請介紹你過去與後端開發相關的經驗。' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'question TTS is unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
 
     expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
     expect(screen.queryByText('請介紹你過去與後端開發相關的經驗。')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/interviews/interview-123/questions/question-1/tts',
+      { method: 'POST' },
+    )
     expect(speech.speak).toHaveBeenCalledTimes(1)
     expect(speech.utterances[0].lang).toBe('zh-TW')
     expect(speech.utterances[0].voice).toBe(googleTaiwanMandarinVoice)
@@ -599,29 +644,93 @@ describe('App', () => {
     installMediaRecorderMock()
     installObjectURLMock()
     mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: 'Backend Engineer',
-        job_description: 'Build APIs',
-        user_profile: 'Go experience',
-        question_count: 1,
-        question_language: 'en-US',
-        status: 'in_progress',
-        questions: [{ id: 'question-1', order: 1, text: 'Tell me about your backend experience.' }],
-        answers: [],
-      }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: 'Backend Engineer',
+            job_description: 'Build APIs',
+            user_profile: 'Go experience',
+            question_count: 1,
+            question_language: 'en-US',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: 'Tell me about your backend experience.' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'question TTS is unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
 
     expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
-    expect(speech.speak).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(1))
     expect(speech.utterances[0].lang).toBe('en-US')
     expect(speech.utterances[0].voice).toBe(englishVoice)
     expect(speech.utterances[0].rate).toBe(1)
     expect(speech.utterances[0].pitch).toBe(1)
+  })
+
+  it('plays generated Gemini TTS audio before recording when the endpoint succeeds', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    const objectURLs = installObjectURLMock()
+    objectURLs.createObjectURL.mockReturnValueOnce('blob:question-audio')
+    const audio = installAudioMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response('wav-bytes', {
+          headers: { 'Content-Type': 'audio/wav' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/interviews/interview-123/questions/question-1/tts',
+        { method: 'POST' },
+      ),
+    )
+    expect(speech.speak).not.toHaveBeenCalled()
+    expect(audio.instances).toHaveLength(1)
+    expect(audio.instances[0].src).toBe('blob:question-audio')
+    expect(audio.instances[0].play).toHaveBeenCalledTimes(1)
+
+    act(() => audio.instances[0].onended?.())
+
+    await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
+    expect(screen.getByText('正在錄音')).toBeInTheDocument()
+    expect(objectURLs.revokeObjectURL).toHaveBeenCalledWith('blob:question-audio')
   })
 
   it('replays the question during recording and discards the current recording', async () => {
@@ -629,20 +738,31 @@ describe('App', () => {
     const media = installMediaRecorderMock()
     installObjectURLMock()
     mockPathname('/interviews/interview-123/session')
-    vi.stubGlobal(
-      'fetch',
-      mockFetchOnce({
-        id: 'interview-123',
-        job_title: '後端工程師',
-        job_description: '需要熟悉 Go',
-        user_profile: '有 Go 經驗',
-        question_count: 1,
-        question_language: 'zh-TW',
-        status: 'in_progress',
-        questions: [{ id: 'question-1', order: 1, text: '問題一' }],
-        answers: [],
-      }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: 'question TTS is unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
     expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
@@ -653,7 +773,7 @@ describe('App', () => {
 
     expect(media.recorders[0].stop).toHaveBeenCalledTimes(1)
     expect(screen.queryByLabelText('回答錄音預覽')).not.toBeInTheDocument()
-    expect(speech.speak).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(speech.speak).toHaveBeenCalledTimes(2))
   })
 
   it('queues uploads in the background and waits before opening the result page', async () => {
@@ -680,6 +800,12 @@ describe('App', () => {
         ),
       )
       .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'question TTS is unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
             id: 'answer-1',
@@ -695,6 +821,7 @@ describe('App', () => {
 
     render(<App />)
     expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    await waitFor(() => expect(speech.utterances).toHaveLength(1))
     act(() => speech.utterances[0].onend?.())
     await waitFor(() => expect(media.recorders).toHaveLength(1))
 

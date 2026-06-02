@@ -167,6 +167,52 @@ Errors:
 {"error":"failed to start interview"}
 ```
 
+## Generate Question TTS Audio
+
+```http
+POST /api/interviews/{interview_id}/questions/{question_id}/tts
+```
+
+Request body: empty.
+
+Success response:
+
+```http
+200 OK
+Content-Type: audio/wav
+```
+
+The response body is a WAV audio file generated for the question text. The audio is generated on demand and is not saved to the database or local storage.
+
+Behavior:
+
+- The backend verifies that the interview exists and that the question belongs to that interview.
+- If `GEMINI_API_KEY` is set, the backend uses `google.golang.org/genai` v1.58.0 to call Gemini TTS with `GEMINI_TTS_MODEL`, then `GEMINI_TTS_FALLBACK_MODEL` after transient failures.
+- Gemini TTS returns inline PCM audio; the backend wraps it as `audio/wav` for browser playback.
+- If the key is missing or Gemini TTS is unavailable, the endpoint returns `503`; the frontend falls back to browser `SpeechSynthesis`.
+
+Errors:
+
+```json
+{"error":"interview not found"}
+```
+
+```json
+{"error":"question not found for interview"}
+```
+
+```json
+{"error":"question TTS is unavailable"}
+```
+
+Curl verification:
+
+```bash
+curl -X POST \
+  -o question.wav \
+  http://localhost:8080/api/interviews/{interview_id}/questions/{question_id}/tts
+```
+
 ## Upload Answer Audio
 
 ```http

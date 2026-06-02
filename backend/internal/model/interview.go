@@ -23,8 +23,9 @@ const (
 	AnswerAnalysisStatusCompleted  = "completed"
 	AnswerAnalysisStatusFailed     = "failed"
 
-	LLMOperationGenerateQuestions = "generate_questions"
-	LLMOperationAnalyzeAnswer     = "analyze_answer"
+	LLMOperationGenerateQuestions   = "generate_questions"
+	LLMOperationAnalyzeAnswer       = "analyze_answer"
+	LLMOperationGenerateQuestionTTS = "generate_question_tts"
 
 	LLMProviderGemini = "gemini"
 
@@ -157,6 +158,13 @@ type AnswerAnalysisContext struct {
 	JobDescription string
 	UserProfile    string
 	QuestionText   string
+}
+
+type QuestionTTSInput struct {
+	InterviewID      string
+	QuestionID       string
+	QuestionText     string
+	QuestionLanguage string
 }
 
 type LLMCallLog struct {

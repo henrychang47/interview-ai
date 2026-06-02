@@ -73,3 +73,18 @@ export async function uploadAnswerAudio(
 
   return parseJSONResponse<UploadAnswerResponse>(response, '上傳回答失敗')
 }
+
+export async function playQuestionAudio(interviewID: string, questionID: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/interviews/${interviewID}/questions/${questionID}/tts`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error('題目語音 API 無法使用')
+  }
+
+  return response.blob()
+}

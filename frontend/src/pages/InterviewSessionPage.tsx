@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { getInterview, uploadAnswerAudio } from '../api/interviews'
+import { getInterview, playQuestionAudio, uploadAnswerAudio } from '../api/interviews'
 import { Button, Card, Icon, StatusBadge } from '../components/ui'
 import type { InterviewDetail } from '../types/interview'
 
@@ -92,6 +92,9 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const recordedChunksRef = useRef<Blob[]>([])
   const discardRecordingRef = useRef(false)
   const autoPlayKeyRef = useRef<string | null>(null)
+  const questionAudioRef = useRef<HTMLAudioElement | null>(null)
+  const questionAudioURLRef = useRef<string | null>(null)
+  const playbackRunRef = useRef(0)
 
   const questions = interview?.questions ?? []
   const currentQuestion = questions[currentQuestionIndex]
@@ -117,6 +120,13 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   }, [])
 
   const stopQuestionPlayback = useCallback(() => {
+    playbackRunRef.current += 1
+    questionAudioRef.current?.pause()
+    questionAudioRef.current = null
+    if (questionAudioURLRef.current) {
+      URL.revokeObjectURL(questionAudioURLRef.current)
+      questionAudioURLRef.current = null
+    }
     if (canSpeakQuestion) {
       window.speechSynthesis.cancel()
     }
@@ -208,33 +218,104 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     }
   }, [canRecordAnswer, currentQuestion, queueAnswerUpload, stopMediaStream])
 
-  const playCurrentQuestion = useCallback(() => {
-    if (!currentQuestion || !interview || !canSpeakQuestion) {
+  const playGeneratedQuestionAudio = useCallback(
+    async (questionID: string) => {
+      if (typeof Audio === 'undefined') {
+        throw new Error('Audio playback is not supported')
+      }
+
+      const audioBlob = await playQuestionAudio(interviewID, questionID)
+      const audioURL = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioURL)
+      questionAudioRef.current = audio
+      questionAudioURLRef.current = audioURL
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve()
+          audio.onerror = () => reject(new Error('Question audio playback failed'))
+          const playResult = audio.play()
+          if (playResult && typeof playResult.catch === 'function') {
+            playResult.catch(reject)
+          }
+        })
+      } finally {
+        if (questionAudioRef.current === audio) {
+          questionAudioRef.current = null
+        }
+        if (questionAudioURLRef.current === audioURL) {
+          URL.revokeObjectURL(audioURL)
+          questionAudioURLRef.current = null
+        }
+      }
+    },
+    [interviewID],
+  )
+
+  const playBrowserSpeechSynthesis = useCallback(
+    async (text: string, language: string) => {
+      if (!canSpeakQuestion) {
+        throw new Error('Speech synthesis is not supported')
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const availableVoices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = language
+        utterance.voice = findSpeechVoice(availableVoices, language)
+        if (isChineseLanguage(language)) {
+          utterance.rate = preferredChineseSpeechRate
+          utterance.pitch = preferredChineseSpeechPitch
+        }
+        utterance.onend = () => resolve()
+        utterance.onerror = () => reject(new Error('Speech synthesis failed'))
+
+        window.speechSynthesis.speak(utterance)
+      })
+    },
+    [canSpeakQuestion, speechVoices],
+  )
+
+  const playCurrentQuestion = useCallback(async () => {
+    if (!currentQuestion || !interview) {
       setPhase('blocked')
       return
     }
 
     stopQuestionPlayback()
+    const playbackRun = ++playbackRunRef.current
     setPhase('playing_question')
 
-    const questionLanguage = interview.question_language || 'zh-TW'
-    const availableVoices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices()
-    const utterance = new SpeechSynthesisUtterance(currentQuestion.text)
-    utterance.lang = questionLanguage
-    utterance.voice = findSpeechVoice(availableVoices, questionLanguage)
-    if (isChineseLanguage(questionLanguage)) {
-      utterance.rate = preferredChineseSpeechRate
-      utterance.pitch = preferredChineseSpeechPitch
-    }
-    utterance.onend = () => {
+    try {
+      await playGeneratedQuestionAudio(currentQuestion.id)
+      if (playbackRun !== playbackRunRef.current) {
+        return
+      }
       void startAnswerRecording()
-    }
-    utterance.onerror = () => {
-      setPhase('blocked')
+      return
+    } catch {
+      // Browser TTS is the intentional fallback when Gemini TTS is unavailable.
     }
 
-    window.speechSynthesis.speak(utterance)
-  }, [canSpeakQuestion, currentQuestion, interview, speechVoices, startAnswerRecording, stopQuestionPlayback])
+    try {
+      await playBrowserSpeechSynthesis(currentQuestion.text, interview.question_language || 'zh-TW')
+      if (playbackRun !== playbackRunRef.current) {
+        return
+      }
+      void startAnswerRecording()
+    } catch {
+      if (playbackRun === playbackRunRef.current) {
+        setPhase('blocked')
+      }
+    }
+  }, [
+    currentQuestion,
+    interview,
+    playBrowserSpeechSynthesis,
+    playGeneratedQuestionAudio,
+    startAnswerRecording,
+    stopQuestionPlayback,
+  ])
 
   useEffect(() => {
     if (!canSpeakQuestion) {

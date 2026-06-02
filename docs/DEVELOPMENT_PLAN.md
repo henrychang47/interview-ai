@@ -447,3 +447,29 @@ Expected work:
 - Add retry controls or re-analysis API for failed answer analysis.
 - Consider a durable job table if the background queue needs to survive backend restarts.
 - Add export/download once the analyzed result format is stable.
+
+## Gemini Question TTS Playback
+
+Completed on 2026-06-02.
+
+Implemented:
+
+- Added `POST /api/interviews/{interview_id}/questions/{question_id}/tts` for on-demand question audio.
+- Added Gemini TTS generation through `google.golang.org/genai` v1.58.0 with configurable TTS model, fallback model, and voice.
+- Wrapped Gemini inline PCM audio as `audio/wav` for browser playback.
+- Validated that requested questions belong to the requested interview before generating audio.
+- Added LLM call logging for real Gemini question TTS attempts.
+- Updated the session page to try backend Gemini TTS first, then fall back to browser `SpeechSynthesis` when the API key is missing, Gemini is unavailable, or browser audio playback fails.
+- Kept generated question audio ephemeral; it is not saved to the database or local storage.
+- Updated `.env.example`, `docs/API.md`, and `README.md` with configuration, API usage, and privacy notes.
+
+Verification:
+
+- `go test ./internal/config ./internal/llm ./internal/service ./internal/handler` passed in `backend`.
+- `npm test -- App.test.tsx` passed in `frontend`.
+
+Manual verification:
+
+- With empty `GEMINI_API_KEY`, start an interview session and confirm question playback falls back to browser TTS.
+- With `GEMINI_API_KEY` configured, start an interview session and confirm the frontend requests `/api/interviews/{interview_id}/questions/{question_id}/tts`.
+- Temporarily configure an invalid TTS model and confirm the session still falls back to browser TTS and starts recording after playback.
