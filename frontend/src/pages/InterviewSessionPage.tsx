@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { getInterview, playQuestionAudio, uploadAnswerAudio } from '../api/interviews'
 import { Button, Card, Icon, StatusBadge } from '../components/ui'
@@ -93,6 +93,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
   const [secondsRemaining, setSecondsRemaining] = useState(safeMaxRecordingSeconds)
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
@@ -112,6 +113,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     typeof navigator !== 'undefined' &&
     Boolean(navigator.mediaDevices?.getUserMedia) &&
     typeof MediaRecorder !== 'undefined'
+  const endConfirmTitleID = useId()
 
   const progressPercent = useMemo(() => {
     if (questions.length === 0) {
@@ -170,6 +172,22 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
     },
     [stopMediaStream],
   )
+
+  const confirmEndInterview = useCallback(() => {
+    stopQuestionPlayback()
+    discardRecordingRef.current = true
+    setUploadQueue([])
+
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop()
+    } else {
+      stopMediaStream()
+    }
+
+    setIsEndConfirmOpen(false)
+    navigateTo('/')
+  }, [stopMediaStream, stopQuestionPlayback])
 
   const startAnswerRecording = useCallback(async () => {
     if (!currentQuestion || !canRecordAnswer) {
@@ -522,13 +540,15 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
               </p>
             ) : null}
           </div>
-          <a
-            href={`/interviews/${interviewID}`}
-            className="flex shrink-0 items-center gap-xs rounded-lg px-sm py-xs text-label-md font-bold text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setIsEndConfirmOpen(true)}
+            className="flex min-h-10 shrink-0 items-center gap-xs rounded-lg px-sm py-xs text-label-md font-bold text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
           >
             <Icon name="close" />
             <span className="hidden md:inline">結束面試</span>
-          </a>
+          </button>
         </div>
         <div className="mx-auto mt-sm w-full max-w-container-max">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
@@ -661,6 +681,52 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           </>
         ) : null}
       </section>
+
+      {isEndConfirmOpen ? (
+        <div
+          data-testid="end-interview-modal-backdrop"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-md"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsEndConfirmOpen(false)
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={endConfirmTitleID}
+            className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-calm-lg"
+          >
+            <div className="flex items-center justify-between gap-md border-b border-outline-variant px-md py-sm md:px-lg">
+              <h2 id={endConfirmTitleID} className="font-headline text-headline-sm text-on-surface">
+                結束面試
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsEndConfirmOpen(false)}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg px-sm py-xs text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+                aria-label="關閉結束面試確認"
+              >
+                <Icon name="close" className="text-[18px]" />
+              </button>
+            </div>
+            <div className="px-md py-md md:px-lg">
+              <p className="text-body-md leading-7 text-on-surface">
+                此次模擬面試將直接結束，尚未完成或尚未上傳的回答不會保留。
+              </p>
+              <div className="mt-lg flex flex-col-reverse gap-sm md:flex-row md:justify-end">
+                <Button type="button" tone="secondary" onClick={() => setIsEndConfirmOpen(false)}>
+                  取消
+                </Button>
+                <Button type="button" tone="danger" icon="close" onClick={confirmEndInterview}>
+                  確認結束
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

@@ -703,6 +703,66 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '回答結束' })).toBeEnabled()
   })
 
+  it('confirms before ending an active interview session and returning home', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'question TTS is unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const pushState = vi.spyOn(window.history, 'pushState')
+
+    render(<App />)
+
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    act(() => speech.utterances[0].onend?.())
+    await waitFor(() => expect(media.recorders).toHaveLength(1))
+    expect(screen.getByText('正在錄音')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '結束面試' }))
+
+    expect(screen.getByRole('dialog', { name: '結束面試' })).toBeInTheDocument()
+    expect(screen.getByText('此次模擬面試將直接結束，尚未完成或尚未上傳的回答不會保留。')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/interviews/interview-123/session')
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(window.location.pathname).toBe('/interviews/interview-123/session')
+    expect(media.recorders[0].stop).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '結束面試' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認結束' }))
+
+    expect(media.recorders[0].stop).toHaveBeenCalledTimes(1)
+    expect(pushState).toHaveBeenCalledWith({}, '', '/')
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(await screen.findByRole('heading', { name: '提升您的面試表現，隨時隨地與 AI 導師練習' })).toBeInTheDocument()
+  })
+
   it('uses the matching English voice without Chinese speech tuning', async () => {
     const englishVoice = createSpeechVoice('en-US', 'US English')
     const speech = installSpeechSynthesisMock([

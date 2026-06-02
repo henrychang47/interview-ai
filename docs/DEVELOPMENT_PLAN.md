@@ -498,6 +498,30 @@ Manual verification:
 - Refresh or directly open the session page and confirm it prefetches missing question audio before playback starts.
 - Temporarily make Gemini TTS unavailable and confirm the session falls back to browser TTS without retrying `/tts` on every question.
 
+## Interview Session End Confirmation
+
+Completed on 2026-06-02.
+
+Implemented:
+
+- Updated the session page `結束面試` control to open a confirmation modal instead of navigating immediately.
+- Warned users that the current simulated interview will directly end and unfinished or unuploaded answers will not be retained.
+- On confirmation, stopped question playback, discarded any active recording or queued uploads, and returned to the homepage.
+- Preserved cancellation behavior so users can close the modal and continue the current session.
+
+Verification:
+
+- `npm test -- App.test.tsx -t "confirms before ending an active interview session and returning home"` passed in `frontend`.
+- `npm test -- App.test.tsx` passed in `frontend`.
+- `npm run build` passed in `frontend`.
+
+Manual verification:
+
+- Start an interview session and click `結束面試`.
+- Confirm a modal appears before navigation and says the simulated interview will directly end.
+- Click `取消` and confirm the session remains in progress.
+- Click `結束面試` again, then `確認結束`, and confirm the app returns to the homepage.
+
 ## Next Step
 
 Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.
