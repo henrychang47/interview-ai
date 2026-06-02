@@ -239,6 +239,10 @@ func (s *stubAudioStorage) SaveAnswerAudio(ctx context.Context, interviewID stri
 	return "storage/audio/" + interviewID + "/" + questionID + ".webm", nil
 }
 
+func (s *stubAudioStorage) DeleteAnswerAudio(ctx context.Context, audioPath string) error {
+	return s.err
+}
+
 type stubAnswerRepository struct {
 	audioPath           string
 	answer              model.Answer

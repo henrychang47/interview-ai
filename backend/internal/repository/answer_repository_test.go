@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"interview-ai/backend/internal/llm"
 	"interview-ai/backend/internal/model"
@@ -73,6 +74,11 @@ func TestUpsertAnswerCreatesAndUpdatesAnswer(t *testing.T) {
 		t.Fatalf("expected nil transcript text, got %+v", answer.TranscriptText)
 	}
 
+	oldCreatedAt := time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `UPDATE answers SET created_at = $2 WHERE id = $1`, answer.ID, oldCreatedAt); err != nil {
+		t.Fatalf("set old created_at: %v", err)
+	}
+
 	updated, err := repository.UpsertAnswer(ctx, created.ID, questionID, "storage/audio/second.webm")
 	if err != nil {
 		t.Fatalf("second UpsertAnswer returned error: %v", err)
@@ -82,6 +88,9 @@ func TestUpsertAnswerCreatesAndUpdatesAnswer(t *testing.T) {
 	}
 	if updated.AudioPath == nil || *updated.AudioPath != "storage/audio/second.webm" {
 		t.Fatalf("expected updated audio path, got %+v", updated.AudioPath)
+	}
+	if !updated.CreatedAt.After(oldCreatedAt) {
+		t.Fatalf("expected re-upload to refresh created_at after %v, got %v", oldCreatedAt, updated.CreatedAt)
 	}
 
 	var answerCount int
@@ -94,6 +103,128 @@ func TestUpsertAnswerCreatesAndUpdatesAnswer(t *testing.T) {
 	}
 	if answerCount != 1 {
 		t.Fatalf("expected one answer row after upsert, got %d", answerCount)
+	}
+}
+
+func TestListExpiredAnswerAudioAndClearAnswerAudioPath(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	interviewRepository := NewInterviewRepository(pool)
+	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+		JobTitle:       "後端工程師",
+		JobDescription: "需要熟悉 Go",
+		UserProfile:    "有 Go 學習經驗",
+		QuestionCount:  3,
+	}, []llm.GeneratedQuestion{
+		{Order: 1, Text: "第一題"},
+		{Order: 2, Text: "第二題"},
+		{Order: 3, Text: "第三題"},
+	})
+	if err != nil {
+		t.Fatalf("CreateWithQuestions returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
+	})
+
+	rows, err := pool.Query(ctx, `
+		SELECT id
+		FROM questions
+		WHERE interview_id = $1
+		ORDER BY question_order
+	`, created.ID)
+	if err != nil {
+		t.Fatalf("query questions: %v", err)
+	}
+	defer rows.Close()
+
+	questionIDs := make([]string, 0, 3)
+	for rows.Next() {
+		var questionID string
+		if err := rows.Scan(&questionID); err != nil {
+			t.Fatalf("scan question id: %v", err)
+		}
+		questionIDs = append(questionIDs, questionID)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate questions: %v", err)
+	}
+	if len(questionIDs) != 3 {
+		t.Fatalf("expected 3 questions, got %d", len(questionIDs))
+	}
+
+	repository := NewAnswerRepository(pool)
+	expiredAnswer, err := repository.UpsertAnswer(ctx, created.ID, questionIDs[0], "storage/audio/expired.webm")
+	if err != nil {
+		t.Fatalf("UpsertAnswer expired returned error: %v", err)
+	}
+	_, err = repository.UpsertAnswer(ctx, created.ID, questionIDs[1], "storage/audio/fresh.webm")
+	if err != nil {
+		t.Fatalf("UpsertAnswer fresh returned error: %v", err)
+	}
+	nullPathAnswer, err := repository.UpsertAnswer(ctx, created.ID, questionIDs[2], "storage/audio/null-path.webm")
+	if err != nil {
+		t.Fatalf("UpsertAnswer null-path returned error: %v", err)
+	}
+
+	expiredCreatedAt := time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)
+	freshCreatedAt := time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `UPDATE answers SET created_at = $2 WHERE id = $1`, expiredAnswer.ID, expiredCreatedAt); err != nil {
+		t.Fatalf("set expired created_at: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE answers SET created_at = $2 WHERE question_id = $1`, questionIDs[1], freshCreatedAt); err != nil {
+		t.Fatalf("set fresh created_at: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE answers SET created_at = $2, audio_path = NULL WHERE id = $1`, nullPathAnswer.ID, expiredCreatedAt); err != nil {
+		t.Fatalf("set null-path answer: %v", err)
+	}
+
+	expired, err := repository.ListExpiredAnswerAudio(ctx, time.Date(2026, 5, 30, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ListExpiredAnswerAudio returned error: %v", err)
+	}
+	if len(expired) != 1 {
+		t.Fatalf("expected one expired answer audio, got %+v", expired)
+	}
+	if expired[0].AnswerID != expiredAnswer.ID {
+		t.Fatalf("expected expired answer id %q, got %q", expiredAnswer.ID, expired[0].AnswerID)
+	}
+	if expired[0].AudioPath != "storage/audio/expired.webm" {
+		t.Fatalf("expected expired audio path, got %q", expired[0].AudioPath)
+	}
+
+	if err := repository.ClearAnswerAudioPath(ctx, expiredAnswer.ID, "storage/audio/wrong.webm"); err != nil {
+		t.Fatalf("ClearAnswerAudioPath wrong path returned error: %v", err)
+	}
+	var stillPresent *string
+	if err := pool.QueryRow(ctx, `SELECT audio_path FROM answers WHERE id = $1`, expiredAnswer.ID).Scan(&stillPresent); err != nil {
+		t.Fatalf("query audio path after wrong clear: %v", err)
+	}
+	if stillPresent == nil || *stillPresent != "storage/audio/expired.webm" {
+		t.Fatalf("expected guarded clear to preserve audio path, got %+v", stillPresent)
+	}
+
+	if err := repository.ClearAnswerAudioPath(ctx, expiredAnswer.ID, "storage/audio/expired.webm"); err != nil {
+		t.Fatalf("ClearAnswerAudioPath returned error: %v", err)
+	}
+	var clearedPath *string
+	if err := pool.QueryRow(ctx, `SELECT audio_path FROM answers WHERE id = $1`, expiredAnswer.ID).Scan(&clearedPath); err != nil {
+		t.Fatalf("query audio path after clear: %v", err)
+	}
+	if clearedPath != nil {
+		t.Fatalf("expected cleared audio path, got %+v", clearedPath)
 	}
 }
 

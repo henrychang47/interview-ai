@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"interview-ai/backend/internal/model"
 	"interview-ai/backend/internal/service"
@@ -74,7 +75,8 @@ func (r *AnswerRepository) UpsertAnswer(ctx context.Context, interviewID string,
 			analysis_status = EXCLUDED.analysis_status,
 			improvement_suggestions = NULL,
 			analysis_error = NULL,
-			analyzed_at = NULL
+			analyzed_at = NULL,
+			created_at = now()
 		RETURNING
 			id,
 			interview_id,
@@ -102,6 +104,44 @@ func (r *AnswerRepository) UpsertAnswer(ctx context.Context, interviewID string,
 	}
 
 	return answer, nil
+}
+
+func (r *AnswerRepository) ListExpiredAnswerAudio(ctx context.Context, cutoff time.Time) ([]model.ExpiredAnswerAudio, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, audio_path
+		FROM answers
+		WHERE audio_path IS NOT NULL
+		  AND created_at < $1
+		ORDER BY created_at, id
+	`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	expiredAudio := []model.ExpiredAnswerAudio{}
+	for rows.Next() {
+		var audio model.ExpiredAnswerAudio
+		if err := rows.Scan(&audio.AnswerID, &audio.AudioPath); err != nil {
+			return nil, err
+		}
+		expiredAudio = append(expiredAudio, audio)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return expiredAudio, nil
+}
+
+func (r *AnswerRepository) ClearAnswerAudioPath(ctx context.Context, answerID string, audioPath string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE answers
+		SET audio_path = NULL
+		WHERE id = $1
+		  AND audio_path = $2
+	`, answerID, audioPath)
+	return err
 }
 
 func (r *AnswerRepository) GetAnswerAnalysisContext(ctx context.Context, interviewID string, questionID string) (model.AnswerAnalysisContext, error) {

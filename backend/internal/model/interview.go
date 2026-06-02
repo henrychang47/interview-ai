@@ -94,6 +94,11 @@ type Answer struct {
 	CreatedAt              time.Time
 }
 
+type ExpiredAnswerAudio struct {
+	AnswerID  string
+	AudioPath string
+}
+
 type InterviewDetailResponse struct {
 	ID               string             `json:"id"`
 	JobTitle         string             `json:"job_title"`

@@ -132,6 +132,12 @@ Answer analysis statuses:
 - `completed`: `transcript_text` and `improvement_suggestions` are available.
 - `failed`: analysis failed; `analysis_error` contains a short diagnostic message.
 
+Answer audio retention:
+
+- Uploaded answer audio expires 3 days after the latest upload time.
+- After the backend cleanup job deletes an expired audio file, the answer row remains available and `audio_path` is returned as `null`.
+- Transcripts, analysis status, improvement suggestions, and analysis errors are retained after audio expiration.
+
 Errors:
 
 ```json
@@ -357,6 +363,8 @@ Content-Type: audio/webm
 ```
 
 The response body is the uploaded WebM audio bytes saved by `POST /api/interviews/{interview_id}/questions/{question_id}/answer`.
+
+Uploaded answer audio is retained for 3 days after the latest upload. After expiration, this endpoint returns `404 Not Found` for the deleted file, and `GET /api/interviews/{interview_id}` returns the answer with `"audio_path": null`.
 
 Errors:
 

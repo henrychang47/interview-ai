@@ -17,6 +17,7 @@ var (
 
 type AudioStorage interface {
 	SaveAnswerAudio(ctx context.Context, interviewID string, questionID string, file io.Reader) (string, error)
+	DeleteAnswerAudio(ctx context.Context, audioPath string) error
 }
 
 type AnswerRepository interface {

@@ -444,7 +444,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    await act(async () => {})
+    await act(async () => { })
 
     expect(screen.getByText('題目準備中')).toBeInTheDocument()
     expect(screen.queryByText('問題 1')).not.toBeInTheDocument()
@@ -453,7 +453,7 @@ describe('App', () => {
     await act(async () => {
       vi.advanceTimersByTime(2000)
     })
-    await act(async () => {})
+    await act(async () => { })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     vi.useRealTimers()
   })
@@ -469,7 +469,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    await act(async () => {})
+    await act(async () => { })
 
     expect(screen.getByText('題目準備中')).toBeInTheDocument()
     expect(screen.queryByText('載入面試中...')).not.toBeInTheDocument()
@@ -483,7 +483,7 @@ describe('App', () => {
     expect(screen.queryByText('載入面試中...')).not.toBeInTheDocument()
 
     pollingResponse.resolve()
-    await act(async () => {})
+    await act(async () => { })
     vi.useRealTimers()
   })
 
@@ -609,7 +609,7 @@ describe('App', () => {
     expect(screen.queryByText('面試進行中')).not.toBeInTheDocument()
 
     ttsResponse.resolve()
-    await act(async () => {})
+    await act(async () => { })
     expect(screen.getByText('題目已準備完成')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '開始模擬面試' })).toBeEnabled()
   })
@@ -943,7 +943,7 @@ describe('App', () => {
     expect(screen.getAllByText('載入面試中...')).toHaveLength(1)
 
     ttsResponse.resolve()
-    await act(async () => {})
+    await act(async () => { })
   })
 
   it('plays cached prefetched question audio in the session without calling the TTS endpoint again', async () => {
@@ -1272,12 +1272,12 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    await act(async () => {})
+    await act(async () => { })
 
     expect(screen.getByText('AI 分析中')).toBeInTheDocument()
 
     await vi.advanceTimersByTimeAsync(3000)
-    await act(async () => {})
+    await act(async () => { })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(screen.getByText('這是逐字稿。')).toBeInTheDocument()
@@ -1319,7 +1319,7 @@ describe('App', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    await act(async () => {})
+    await act(async () => { })
 
     expect(screen.getByText('AI 分析中')).toBeInTheDocument()
 
@@ -1331,7 +1331,7 @@ describe('App', () => {
     expect(screen.queryByText('載入面試結果中...')).not.toBeInTheDocument()
 
     slowPollingResponse.resolve()
-    await act(async () => {})
+    await act(async () => { })
     vi.useRealTimers()
   })
 
@@ -1390,6 +1390,44 @@ describe('App', () => {
     expect(await screen.findByText('第一題')).toBeInTheDocument()
     expect(screen.getByText('尚未上傳回答')).toBeInTheDocument()
     expect(screen.queryByLabelText('問題 1 回答音檔')).not.toBeInTheDocument()
+  })
+
+  it('shows an expired-audio state when an answer has no audio path', async () => {
+    mockPathname('/interviews/interview-123/result')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({
+        id: 'interview-123',
+        job_title: '後端工程師',
+        job_description: '需要熟悉 Go',
+        user_profile: '有 Go 學習經驗',
+        question_count: 1,
+        status: 'completed',
+        questions: [{ id: 'question-1', order: 1, text: '第一題' }],
+        answers: [
+          {
+            id: 'answer-1',
+            question_id: 'question-1',
+            audio_path: null,
+            transcript_text: '這是保留的逐字稿。',
+            analysis_status: 'completed',
+            improvement_suggestions: '這是保留的建議。',
+            analysis_error: null,
+            analyzed_at: '2026-05-27T06:32:04Z',
+            created_at: '2026-05-27T06:30:04Z',
+          },
+        ],
+      }),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByText('第一題')).toBeInTheDocument()
+    expect(screen.getByText('回答音檔已過期')).toBeInTheDocument()
+    expect(screen.queryByText('尚未上傳回答')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('問題 1 回答音檔')).not.toBeInTheDocument()
+    expect(screen.getByText('這是保留的逐字稿。')).toBeInTheDocument()
+    expect(screen.getByText('這是保留的建議。')).toBeInTheDocument()
   })
 
   it('shows an API error when loading a result page fails', async () => {
