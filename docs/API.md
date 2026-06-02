@@ -167,7 +167,60 @@ Errors:
 {"error":"failed to start interview"}
 ```
 
-## Generate Question TTS Audio
+## Generate Interview Question TTS Audio
+
+```http
+POST /api/interviews/{interview_id}/questions/tts
+```
+
+Request body: empty.
+
+Success response:
+
+```http
+200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "audio": [
+    {
+      "question_id": "question_uuid_1",
+      "content_type": "audio/wav",
+      "audio_base64": "UklGR..."
+    }
+  ]
+}
+```
+
+The response contains generated WAV audio for every question in the interview, encoded as base64 for JSON transport. The audio is generated on demand and is not saved to the database or backend local storage.
+
+Behavior:
+
+- The backend verifies that the interview exists and loads its saved questions server-side, even while `GET /api/interviews/{interview_id}` keeps question text hidden before the session starts.
+- The preparation page calls this endpoint after questions are ready, stores successful WAV blobs only in browser memory, and enables `開始模擬面試` only after this preparation step completes.
+- If `GEMINI_API_KEY` is set, the backend uses Gemini TTS with the configured TTS model, fallback model, and voice.
+- If the key is missing or Gemini TTS is unavailable, the endpoint returns `503`; the frontend marks generated audio preparation complete and falls back to browser `SpeechSynthesis` during the session.
+
+Errors:
+
+```json
+{"error":"interview not found"}
+```
+
+```json
+{"error":"question TTS is unavailable"}
+```
+
+Curl verification:
+
+```bash
+curl -X POST \
+  http://localhost:8080/api/interviews/{interview_id}/questions/tts
+```
+
+## Generate Single Question TTS Audio
 
 ```http
 POST /api/interviews/{interview_id}/questions/{question_id}/tts
@@ -182,13 +235,15 @@ Success response:
 Content-Type: audio/wav
 ```
 
-The response body is a WAV audio file generated for the question text. The audio is generated on demand and is not saved to the database or local storage.
+The response body is a WAV audio file generated for the question text. The audio is generated on demand and is not saved to the database or backend local storage.
 
 Behavior:
 
 - The backend verifies that the interview exists and that the question belongs to that interview.
 - If `GEMINI_API_KEY` is set, the backend uses `google.golang.org/genai` v1.58.0 to call Gemini TTS with `GEMINI_TTS_MODEL`, then `GEMINI_TTS_FALLBACK_MODEL` after transient failures.
 - Gemini TTS returns inline PCM audio; the backend wraps it as `audio/wav` for browser playback.
+- The session page can call this endpoint to rebuild missing in-memory audio when an `in_progress` interview is opened directly or after a browser refresh.
+- The session page plays the in-memory audio blob first when available. Browser refreshes clear this memory cache, so the session rebuilds it before playback.
 - If the key is missing or Gemini TTS is unavailable, the endpoint returns `503`; the frontend falls back to browser `SpeechSynthesis`.
 
 Errors:

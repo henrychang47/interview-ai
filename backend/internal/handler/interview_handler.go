@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -21,6 +22,7 @@ type InterviewService interface {
 
 type QuestionTTSService interface {
 	GenerateQuestionSpeech(ctx context.Context, interviewID string, questionID string) ([]byte, error)
+	GenerateInterviewQuestionSpeech(ctx context.Context, interviewID string) ([]model.QuestionTTSAudio, error)
 }
 
 func NewInterviewHandler(interviewService InterviewService, answerService AnswerService) http.Handler {
@@ -33,6 +35,7 @@ func NewInterviewHandlerWithTTS(interviewService InterviewService, answerService
 	router.Get("/{interviewID}", getInterview(interviewService))
 	router.Post("/{interviewID}/start", startInterview(interviewService))
 	if questionTTSService != nil {
+		router.Post("/{interviewID}/questions/tts", generateInterviewQuestionTTS(questionTTSService))
 		router.Post("/{interviewID}/questions/{questionID}/tts", generateQuestionTTS(questionTTSService))
 	}
 	router.Post("/{interviewID}/questions/{questionID}/answer", uploadAnswer(answerService))
@@ -129,6 +132,36 @@ func generateQuestionTTS(questionTTSService QuestionTTSService) http.HandlerFunc
 		if _, err := w.Write(audio); err != nil {
 			slog.Error("write question tts audio", "error", err)
 		}
+	}
+}
+
+func generateInterviewQuestionTTS(questionTTSService QuestionTTSService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		interviewID := chi.URLParam(r, "interviewID")
+		audio, err := questionTTSService.GenerateInterviewQuestionSpeech(r.Context(), interviewID)
+		if err != nil {
+			switch {
+			case errors.Is(err, service.ErrInterviewNotFound):
+				writeError(w, http.StatusNotFound, err.Error())
+			case errors.Is(err, service.ErrQuestionTTSUnavailable):
+				writeError(w, http.StatusServiceUnavailable, service.ErrQuestionTTSUnavailable.Error())
+			default:
+				slog.Error("generate interview question tts", "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to generate question audio")
+			}
+			return
+		}
+
+		responseAudio := make([]model.QuestionTTSAudioResponse, 0, len(audio))
+		for _, item := range audio {
+			responseAudio = append(responseAudio, model.QuestionTTSAudioResponse{
+				QuestionID:  item.QuestionID,
+				ContentType: "audio/wav",
+				AudioBase64: base64.StdEncoding.EncodeToString(item.Audio),
+			})
+		}
+
+		writeJSON(w, http.StatusOK, model.InterviewQuestionTTSResponse{Audio: responseAudio})
 	}
 }
 

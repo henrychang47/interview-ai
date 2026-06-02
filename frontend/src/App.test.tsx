@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
+import { clearQuestionAudioCache, storeQuestionAudio } from './lib/questionAudioCache'
 
 function mockPathname(pathname: string) {
   window.history.pushState({}, '', pathname)
@@ -228,6 +229,7 @@ describe('App', () => {
 
   afterEach(() => {
     cleanup()
+    clearQuestionAudioCache()
     vi.restoreAllMocks()
     vi.useRealTimers()
     window.history.pushState({}, '', '/')
@@ -508,6 +510,17 @@ describe('App', () => {
         ),
       )
       .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            audio: [
+              { question_id: 'question-1', content_type: 'audio/wav', audio_base64: 'cXVlc3Rpb24tMS13YXY=' },
+              { question_id: 'question-2', content_type: 'audio/wav', audio_base64: 'cXVlc3Rpb24tMi13YXY=' },
+            ],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: 'interview-123', status: 'in_progress' }), {
           headers: { 'Content-Type': 'application/json' },
         }),
@@ -536,14 +549,69 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: '個人資訊' })).toBeInTheDocument()
     expect(findElementByExactText(userProfile)).toHaveClass('whitespace-pre-wrap', 'break-words')
     fireEvent.click(screen.getByRole('button', { name: '關閉' }))
-    fireEvent.click(screen.getByRole('button', { name: '開始模擬面試' }))
+    expect(await screen.findByRole('button', { name: '開始模擬面試' })).toBeEnabled()
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenLastCalledWith('/api/interviews/interview-123/start', {
+      expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/tts', {
         method: 'POST',
       }),
     )
+    fireEvent.click(screen.getByRole('button', { name: '開始模擬面試' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/start', {
+        method: 'POST',
+      }),
+    )
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/interviews/interview-123/questions/question-1/tts', {
+      method: 'POST',
+    })
     expect(pushState).toHaveBeenCalledWith({}, '', '/interviews/interview-123/session')
+  })
+
+  it('keeps showing question preparation until question audio is prepared', async () => {
+    mockPathname('/interviews/interview-123')
+    const ttsResponse = deferredResponse(
+      new Response(
+        JSON.stringify({
+          audio: [{ question_id: 'question-1', content_type: 'audio/wav', audio_base64: 'cXVlc3Rpb24tMS13YXY=' }],
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        interviewDetailResponse({
+          status: 'questions_ready',
+          questions: [],
+        }),
+      )
+      .mockReturnValueOnce(ttsResponse.promise)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'interview-123', status: 'in_progress' }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('題目準備中')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/tts', {
+        method: 'POST',
+      }),
+    )
+    expect(screen.queryByText('題目已準備完成')).not.toBeInTheDocument()
+    expect(screen.queryByText('準備題目語音...')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '開始模擬面試' })).not.toBeInTheDocument()
+    expect(screen.queryByText('面試進行中')).not.toBeInTheDocument()
+
+    ttsResponse.resolve()
+    await act(async () => {})
+    expect(screen.getByText('題目已準備完成')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '開始模擬面試' })).toBeEnabled()
   })
 
   it('loads interview details and displays in-progress questions at /interviews/:id', async () => {
@@ -731,6 +799,130 @@ describe('App', () => {
     await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
     expect(screen.getByText('正在錄音')).toBeInTheDocument()
     expect(objectURLs.revokeObjectURL).toHaveBeenCalledWith('blob:question-audio')
+  })
+
+  it('prefetches all question audio when opening an in-progress session before playback', async () => {
+    const speech = installSpeechSynthesisMock()
+    const objectURLs = installObjectURLMock()
+    objectURLs.createObjectURL.mockReturnValueOnce('blob:prefetched-question-audio')
+    const audio = installAudioMock()
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 2,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [
+              { id: 'question-1', order: 1, text: '問題一' },
+              { id: 'question-2', order: 2, text: '問題二' },
+            ],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response('question-1-wav', { headers: { 'Content-Type': 'audio/wav' } }))
+      .mockResolvedValueOnce(new Response('question-2-wav', { headers: { 'Content-Type': 'audio/wav' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/question-1/tts', {
+      method: 'POST',
+    })
+    expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/question-2/tts', {
+      method: 'POST',
+    })
+    expect(speech.speak).not.toHaveBeenCalled()
+    expect(audio.instances).toHaveLength(1)
+    expect(audio.instances[0].src).toBe('blob:prefetched-question-audio')
+  })
+
+  it('shows a single loading message while the session prepares cached audio', async () => {
+    installSpeechSynthesisMock()
+    installObjectURLMock()
+    installAudioMock()
+    mockPathname('/interviews/interview-123/session')
+    const ttsResponse = deferredResponse(new Response('question-1-wav', { headers: { 'Content-Type': 'audio/wav' } }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'interview-123',
+            job_title: '後端工程師',
+            job_description: '需要熟悉 Go',
+            user_profile: '有 Go 經驗',
+            question_count: 1,
+            question_language: 'zh-TW',
+            status: 'in_progress',
+            questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+            answers: [],
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockReturnValueOnce(ttsResponse.promise)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/question-1/tts', {
+        method: 'POST',
+      }),
+    )
+    expect(screen.getAllByText('載入面試中...')).toHaveLength(1)
+
+    ttsResponse.resolve()
+    await act(async () => {})
+  })
+
+  it('plays cached prefetched question audio in the session without calling the TTS endpoint again', async () => {
+    const speech = installSpeechSynthesisMock()
+    const media = installMediaRecorderMock()
+    const objectURLs = installObjectURLMock()
+    objectURLs.createObjectURL.mockReturnValueOnce('blob:cached-question-audio')
+    const audio = installAudioMock()
+    storeQuestionAudio('interview-123', 'question-1', new Blob(['cached-wav'], { type: 'audio/wav' }))
+    mockPathname('/interviews/interview-123/session')
+    const fetchMock = mockFetchOnce({
+      id: 'interview-123',
+      job_title: '後端工程師',
+      job_description: '需要熟悉 Go',
+      user_profile: '有 Go 經驗',
+      question_count: 1,
+      question_language: 'zh-TW',
+      status: 'in_progress',
+      questions: [{ id: 'question-1', order: 1, text: '問題一' }],
+      answers: [],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByText('正在播放題目')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/interviews/interview-123/questions/question-1/tts',
+      { method: 'POST' },
+    )
+    expect(speech.speak).not.toHaveBeenCalled()
+    expect(audio.instances).toHaveLength(1)
+    expect(audio.instances[0].src).toBe('blob:cached-question-audio')
+    expect(audio.instances[0].play).toHaveBeenCalledTimes(1)
+
+    act(() => audio.instances[0].onended?.())
+
+    await waitFor(() => expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true }))
+    expect(objectURLs.revokeObjectURL).toHaveBeenCalledWith('blob:cached-question-audio')
   })
 
   it('replays the question during recording and discards the current recording', async () => {

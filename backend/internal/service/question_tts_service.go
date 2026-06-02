@@ -60,3 +60,37 @@ func (s *QuestionTTSService) GenerateQuestionSpeech(ctx context.Context, intervi
 
 	return nil, ErrQuestionNotFoundForInterview
 }
+
+func (s *QuestionTTSService) GenerateInterviewQuestionSpeech(ctx context.Context, interviewID string) ([]model.QuestionTTSAudio, error) {
+	detail, err := s.repository.GetByID(ctx, interviewID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, ErrInterviewNotFound) {
+			return nil, ErrInterviewNotFound
+		}
+		return nil, err
+	}
+
+	language := detail.QuestionLanguage
+	if language == "" {
+		language = model.QuestionLanguageZhTW
+	}
+
+	audio := make([]model.QuestionTTSAudio, 0, len(detail.Questions))
+	for _, question := range detail.Questions {
+		generatedAudio, err := s.generator.GenerateQuestionSpeech(ctx, model.QuestionTTSInput{
+			InterviewID:      interviewID,
+			QuestionID:       question.ID,
+			QuestionText:     question.Text,
+			QuestionLanguage: language,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQuestionTTSUnavailable, err)
+		}
+		audio = append(audio, model.QuestionTTSAudio{
+			QuestionID: question.ID,
+			Audio:      generatedAudio,
+		})
+	}
+
+	return audio, nil
+}

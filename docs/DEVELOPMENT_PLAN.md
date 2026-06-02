@@ -438,16 +438,6 @@ Manual verification:
 - Confirm Chinese playback uses rate `1.1` and pitch `0.8`.
 - Repeat with `question_language: en-US` and confirm English questions still use an English voice when available.
 
-## Next Step
-
-Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.
-
-Expected work:
-
-- Add retry controls or re-analysis API for failed answer analysis.
-- Consider a durable job table if the background queue needs to survive backend restarts.
-- Add export/download once the analyzed result format is stable.
-
 ## Gemini Question TTS Playback
 
 Completed on 2026-06-02.
@@ -473,3 +463,47 @@ Manual verification:
 - With empty `GEMINI_API_KEY`, start an interview session and confirm question playback falls back to browser TTS.
 - With `GEMINI_API_KEY` configured, start an interview session and confirm the frontend requests `/api/interviews/{interview_id}/questions/{question_id}/tts`.
 - Temporarily configure an invalid TTS model and confirm the session still falls back to browser TTS and starts recording after playback.
+
+## Frontend Question Audio Prefetch
+
+Completed on 2026-06-02.
+
+Implemented:
+
+- Added a frontend in-memory question audio cache for generated TTS blobs.
+- Added `POST /api/interviews/{interview_id}/questions/tts` so the preparation page can fetch generated audio for every saved question before the session starts while question text remains hidden.
+- Updated the preparation page to automatically prepare question audio when questions are ready, store successful WAV blobs in browser memory, and keep showing `題目準備中` until audio preparation completes.
+- Updated the preparation page so `題目已準備完成` and `開始模擬面試` appear only after both questions and question audio are ready.
+- Updated start behavior so pressing `開始模擬面試` after audio is ready starts the interview and navigates directly to the session first question.
+- Kept the preparation page visible during question-audio preparation so users do not see the intermediate `in_progress` detail view before the session route opens.
+- Updated the session page to prefetch any missing Gemini TTS audio before playback when an in-progress interview is opened directly or after refresh.
+- Updated the session page to play prefetched in-memory audio first, then fall back to browser `SpeechSynthesis` if generated audio is unavailable.
+- Added a per-interview prefetch-complete marker so failed prefetches do not cause a new generated-TTS request at the start of every question.
+- Kept generated question audio non-persistent: no database columns, no backend audio files, no localStorage, and no IndexedDB.
+- Preserved replay behavior so `重新播放題目` uses the same cache-first playback flow.
+- Updated `docs/API.md` and `README.md` with the prefetch and privacy behavior.
+
+Verification:
+
+- `npm test -- App.test.tsx` passed in `frontend` with 28 tests.
+- `npm run build` passed in `frontend`.
+- `go test ./...` passed in `backend`.
+
+Manual verification:
+
+- With `GEMINI_API_KEY` configured, wait on the preparation page and confirm `/api/interviews/{interview_id}/questions/tts` runs before `開始模擬面試` becomes enabled.
+- Confirm the page continues showing `題目準備中` while question audio is being prepared and does not show `準備題目語音...`.
+- Click `開始模擬面試` after the button is enabled and confirm it navigates directly to the session first question.
+- Confirm the session plays the prefetched question audio without re-requesting `/tts` for the same question.
+- Refresh or directly open the session page and confirm it prefetches missing question audio before playback starts.
+- Temporarily make Gemini TTS unavailable and confirm the session falls back to browser TTS without retrying `/tts` on every question.
+
+## Next Step
+
+Post-MVP / Phase 2: continue hardening Gemini answer analysis and consider export/download flows.
+
+Expected work:
+
+- Add retry controls or re-analysis API for failed answer analysis.
+- Consider a durable job table if the background queue needs to survive backend restarts.
+- Add export/download once the analyzed result format is stable.

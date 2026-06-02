@@ -215,6 +215,33 @@ func TestGenerateQuestionTTSReturnsMissingQuestion(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusNotFound, "question not found for interview")
 }
 
+func TestGenerateInterviewQuestionTTSReturnsBase64Audio(t *testing.T) {
+	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+		interviewAudio: []model.QuestionTTSAudio{
+			{QuestionID: "question-1", Audio: []byte("question-1-wav")},
+			{QuestionID: "question-2", Audio: []byte("question-2-wav")},
+		},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/tts", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", response.Code)
+	}
+	var body model.InterviewQuestionTTSResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("expected JSON response, got error: %v", err)
+	}
+	if len(body.Audio) != 2 {
+		t.Fatalf("expected two audio responses, got %+v", body.Audio)
+	}
+	if body.Audio[0].QuestionID != "question-1" || body.Audio[0].ContentType != "audio/wav" || body.Audio[0].AudioBase64 != "cXVlc3Rpb24tMS13YXY=" {
+		t.Fatalf("unexpected first audio response: %+v", body.Audio[0])
+	}
+}
+
 func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, status int, message string) {
 	t.Helper()
 	if response.Code != status {
@@ -251,8 +278,9 @@ func (s *stubInterviewService) StartInterview(ctx context.Context, interviewID s
 }
 
 type stubQuestionTTSService struct {
-	audio []byte
-	err   error
+	audio          []byte
+	interviewAudio []model.QuestionTTSAudio
+	err            error
 }
 
 func (s *stubQuestionTTSService) GenerateQuestionSpeech(ctx context.Context, interviewID string, questionID string) ([]byte, error) {
@@ -260,4 +288,11 @@ func (s *stubQuestionTTSService) GenerateQuestionSpeech(ctx context.Context, int
 		return nil, s.err
 	}
 	return s.audio, nil
+}
+
+func (s *stubQuestionTTSService) GenerateInterviewQuestionSpeech(ctx context.Context, interviewID string) ([]model.QuestionTTSAudio, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.interviewAudio, nil
 }

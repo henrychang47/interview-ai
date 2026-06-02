@@ -167,6 +167,21 @@ type QuestionTTSInput struct {
 	QuestionLanguage string
 }
 
+type QuestionTTSAudio struct {
+	QuestionID string
+	Audio      []byte
+}
+
+type QuestionTTSAudioResponse struct {
+	QuestionID  string `json:"question_id"`
+	ContentType string `json:"content_type"`
+	AudioBase64 string `json:"audio_base64"`
+}
+
+type InterviewQuestionTTSResponse struct {
+	Audio []QuestionTTSAudioResponse `json:"audio"`
+}
+
 type LLMCallLog struct {
 	Operation    string
 	Provider     string

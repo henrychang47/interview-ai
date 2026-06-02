@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview, playQuestionAudio, uploadAnswerAudio } from '../api/interviews'
 import { Button, Card, Icon, StatusBadge } from '../components/ui'
+import {
+  getQuestionAudio,
+  hasQuestionAudioPrefetchCompleted,
+  markQuestionAudioPrefetchComplete,
+  storeQuestionAudio,
+} from '../lib/questionAudioCache'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewSessionPageProps = {
@@ -224,7 +230,11 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
         throw new Error('Audio playback is not supported')
       }
 
-      const audioBlob = await playQuestionAudio(interviewID, questionID)
+      const cachedAudio = getQuestionAudio(interviewID, questionID)
+      if (!cachedAudio && hasQuestionAudioPrefetchCompleted(interviewID)) {
+        throw new Error('Prefetched question audio is unavailable')
+      }
+      const audioBlob = cachedAudio ?? (await playQuestionAudio(interviewID, questionID))
       const audioURL = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioURL)
       questionAudioRef.current = audio
@@ -353,6 +363,21 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           setError('請先從準備頁開始面試。')
           return
         }
+        await Promise.allSettled(
+          detail.questions.map(async (question) => {
+            if (getQuestionAudio(interviewID, question.id)) {
+              return
+            }
+            const audio = await playQuestionAudio(interviewID, question.id)
+            if (isMounted) {
+              storeQuestionAudio(interviewID, question.id, audio)
+            }
+          }),
+        )
+        if (!isMounted) {
+          return
+        }
+        markQuestionAudioPrefetchComplete(interviewID)
         setPhase('advancing')
       } catch (error) {
         if (isMounted) {
@@ -525,7 +550,7 @@ export default function InterviewSessionPage({ interviewID }: InterviewSessionPa
           </Card>
         ) : null}
 
-        {interview ? (
+        {interview && phase !== 'loading' ? (
           <>
             {currentQuestion ? (
               <div className="flex w-full max-w-3xl flex-col items-center text-center">

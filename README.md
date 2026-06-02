@@ -118,8 +118,9 @@ http://localhost:5173/interviews/new
 - 輸入職位資訊後按「下一步」。
 - 選擇題目數量與語言，按「測試麥克風」，並允許瀏覽器麥克風權限。
 - 按「建立面試」後確認準備頁顯示「題目準備中」，且不顯示題目文字。
-- 等到「題目已準備完成」後按「開始模擬面試」。
-- 確認 session 自動朗讀題目、隱藏題目文字、朗讀後自動錄音，並支援「回答結束」與「重新播放題目」。
+- 確認系統產生題目與準備題目語音期間都維持顯示「題目準備中」。
+- 等到「題目已準備完成」後確認「開始模擬面試」才出現並可按。
+- 確認「開始模擬面試」啟用後按下會直接進入 session 第一題，自動朗讀題目、隱藏題目文字、朗讀後自動錄音，並支援「回答結束」與「重新播放題目」。
 - 完成全部題目後確認結果頁顯示題目與可播放的回答音檔。
 - 確認結果頁先顯示「AI 分析中」，稍後顯示逐字稿與改進建議；mock mode 會產生固定測試文字。
 - 若 Gemini 回傳的改進建議包含 Markdown，例如標題、粗體、清單或換行，確認結果頁會正常排版顯示。
@@ -151,11 +152,11 @@ docker compose up --build -d backend frontend
 
 Never commit real API keys. Keep local secrets in `.env`.
 
-When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. During the session, the frontend first requests `POST /api/interviews/{interview_id}/questions/{question_id}/tts`; the backend sends only the question text to Gemini TTS, wraps the returned PCM audio as WAV, and does not save the generated question audio. After each answer upload, a background worker sends the saved WebM audio file plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini to generate `transcript_text` and context-aware `improvement_suggestions`. Empty `GEMINI_ANSWER_MODEL` values reuse the question-generation model settings.
+When Gemini mode is enabled, the backend uses `google.golang.org/genai` v1.58.0 to send the interview `job_title`, `job_description`, `user_profile`, and selected `question_language` to Gemini to generate questions. After questions are ready, the preparation page requests `POST /api/interviews/{interview_id}/questions/tts` and keeps the returned WAV blobs only in browser memory; `開始模擬面試` is disabled until this preparation step completes. The backend sends only the saved question text to Gemini TTS, wraps the returned PCM audio as WAV, and does not save the generated question audio. The session page plays the browser-memory audio first. If the page is refreshed, it rebuilds missing generated audio before playback; if Gemini TTS is unavailable, it falls back to browser `SpeechSynthesis` without retrying generated TTS on every question. After each answer upload, a background worker sends the saved WebM audio file plus the related `job_title`, `job_description`, `user_profile`, and question text to Gemini to generate `transcript_text` and context-aware `improvement_suggestions`. Empty `GEMINI_ANSWER_MODEL` values reuse the question-generation model settings.
 
 Transient Gemini `429` / `RESOURCE_EXHAUSTED` and `503` / `UNAVAILABLE` responses are retried for question generation before falling back from `GEMINI_MODEL` to `GEMINI_FALLBACK_MODEL`. Test data is stored in PostgreSQL, and answer audio files are stored under `backend/storage/audio`; for local cleanup, remove test rows from PostgreSQL and delete local audio files.
 
-Privacy note: local test data includes profile text, answer audio, transcripts, and improvement suggestions. With `GEMINI_API_KEY` configured, job details and profile text are sent from the backend to Gemini for question generation, question text is sent for TTS playback and answer analysis, and answer audio is sent for analysis. With an empty key, answer audio stays local, mock analysis text is used, and question playback uses browser TTS.
+Privacy note: local test data includes profile text, answer audio, transcripts, and improvement suggestions. With `GEMINI_API_KEY` configured, job details and profile text are sent from the backend to Gemini for question generation, question text is sent for TTS playback and answer analysis, and answer audio is sent for analysis. Generated question audio is not persisted by the backend and is kept only in browser memory until the page is refreshed or closed. With an empty key, answer audio stays local, mock analysis text is used, and question playback uses browser TTS.
 
 ## Local Checks
 

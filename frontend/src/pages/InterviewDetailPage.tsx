@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { getInterview, startInterview } from '../api/interviews'
+import { getInterview, prepareQuestionAudio, startInterview } from '../api/interviews'
 import { Button, Card, Icon, InfoDisclosure, LinkButton, PageShell, StatusBadge, TopBar } from '../components/ui'
+import {
+  hasQuestionAudioPrefetchCompleted,
+  markQuestionAudioPrefetchComplete,
+  storeQuestionAudio,
+} from '../lib/questionAudioCache'
 import type { InterviewDetail } from '../types/interview'
 
 type InterviewDetailPageProps = {
@@ -13,6 +18,7 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [isAudioReady, setIsAudioReady] = useState(false)
   const isPollingRef = useRef(false)
 
   const loadInterview = useCallback(async ({ showLoading = true } = {}) => {
@@ -58,6 +64,44 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
     return () => window.clearInterval(intervalID)
   }, [interview?.status, loadInterview])
 
+  useEffect(() => {
+    if (!interview || interview.status !== 'questions_ready') {
+      setIsAudioReady(false)
+      return
+    }
+    if (hasQuestionAudioPrefetchCompleted(interview.id)) {
+      setIsAudioReady(true)
+      return
+    }
+
+    let isMounted = true
+    const currentInterview = interview
+    setIsAudioReady(false)
+
+    async function prepareAudio() {
+      try {
+        const preparedAudio = await prepareQuestionAudio(currentInterview.id)
+        if (!isMounted) {
+          return
+        }
+        preparedAudio.forEach((item) => storeQuestionAudio(currentInterview.id, item.questionID, item.audio))
+      } catch {
+        // Browser SpeechSynthesis remains the fallback when generated audio is unavailable.
+      }
+
+      if (isMounted) {
+        markQuestionAudioPrefetchComplete(currentInterview.id)
+        setIsAudioReady(true)
+      }
+    }
+
+    prepareAudio()
+
+    return () => {
+      isMounted = false
+    }
+  }, [interview])
+
   async function handleStartInterview() {
     if (!interview) {
       return
@@ -77,6 +121,10 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
       setIsStarting(false)
     }
   }
+
+  const isQuestionPreparationPending =
+    interview?.status === 'generating_questions' ||
+    (interview?.status === 'questions_ready' && !isAudioReady)
 
   return (
     <>
@@ -118,7 +166,7 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
             <InfoDisclosure title="個人資訊">{interview.user_profile}</InfoDisclosure>
           </div>
 
-          {interview.status === 'generating_questions' ? (
+          {isQuestionPreparationPending ? (
             <Card className="flex min-h-[45vh] flex-col items-center justify-center p-xl text-center">
               <div className="relative mb-lg h-16 w-16">
                 <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
@@ -131,7 +179,7 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
             </Card>
           ) : null}
 
-          {interview.status === 'questions_ready' ? (
+          {interview.status === 'questions_ready' && isAudioReady ? (
             <Card className="p-lg md:p-xl">
               <div className="flex flex-col gap-lg md:flex-row md:items-center md:justify-between">
                 <div>

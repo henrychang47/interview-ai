@@ -80,10 +80,11 @@ func (r *stubQuestionTTSRepository) GetByID(ctx context.Context, interviewID str
 }
 
 type stubQuestionTTSGenerator struct {
-	input  model.QuestionTTSInput
-	audio  []byte
-	err    error
-	called bool
+	input             model.QuestionTTSInput
+	audio             []byte
+	audioByQuestionID map[string][]byte
+	err               error
+	called            bool
 }
 
 func (g *stubQuestionTTSGenerator) GenerateQuestionSpeech(ctx context.Context, input model.QuestionTTSInput) ([]byte, error) {
@@ -91,6 +92,9 @@ func (g *stubQuestionTTSGenerator) GenerateQuestionSpeech(ctx context.Context, i
 	g.input = input
 	if g.err != nil {
 		return nil, g.err
+	}
+	if audio, ok := g.audioByQuestionID[input.QuestionID]; ok {
+		return audio, nil
 	}
 	return g.audio, nil
 }
@@ -125,5 +129,38 @@ func TestQuestionTTSServiceUsesDefaultLanguageWhenMissing(t *testing.T) {
 
 	if generator.input.QuestionLanguage != model.QuestionLanguageZhTW {
 		t.Fatalf("expected default zh-TW language, got %q", generator.input.QuestionLanguage)
+	}
+}
+
+func TestQuestionTTSServiceGeneratesSpeechForAllInterviewQuestions(t *testing.T) {
+	repository := &stubQuestionTTSRepository{
+		detail: model.InterviewDetail{
+			ID:               "interview-id",
+			QuestionLanguage: model.QuestionLanguageZhTW,
+			Questions: []model.Question{
+				{ID: "question-1", Text: "問題一", Order: 1},
+				{ID: "question-2", Text: "問題二", Order: 2},
+			},
+		},
+	}
+	generator := &stubQuestionTTSGenerator{audioByQuestionID: map[string][]byte{
+		"question-1": []byte("question-1-wav"),
+		"question-2": []byte("question-2-wav"),
+	}}
+	service := NewQuestionTTSService(repository, generator)
+
+	audio, err := service.GenerateInterviewQuestionSpeech(context.Background(), "interview-id")
+	if err != nil {
+		t.Fatalf("GenerateInterviewQuestionSpeech returned error: %v", err)
+	}
+
+	if len(audio) != 2 {
+		t.Fatalf("expected two audio results, got %+v", audio)
+	}
+	if audio[0].QuestionID != "question-1" || !bytes.Equal(audio[0].Audio, []byte("question-1-wav")) {
+		t.Fatalf("unexpected first audio result: %+v", audio[0])
+	}
+	if audio[1].QuestionID != "question-2" || !bytes.Equal(audio[1].Audio, []byte("question-2-wav")) {
+		t.Fatalf("unexpected second audio result: %+v", audio[1])
 	}
 }

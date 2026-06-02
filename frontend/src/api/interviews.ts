@@ -88,3 +88,38 @@ export async function playQuestionAudio(interviewID: string, questionID: string)
 
   return response.blob()
 }
+
+type InterviewQuestionAudioResponse = {
+  audio: Array<{
+    question_id: string
+    content_type: string
+    audio_base64: string
+  }>
+}
+
+function base64ToBlob(base64Audio: string, contentType: string) {
+  const binary = atob(base64Audio)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new Blob([bytes], { type: contentType })
+}
+
+export async function prepareQuestionAudio(
+  interviewID: string,
+): Promise<Array<{ questionID: string; audio: Blob }>> {
+  const response = await fetch(`${API_BASE_URL}/api/interviews/${interviewID}/questions/tts`, {
+    method: 'POST',
+  })
+
+  const body = await parseJSONResponse<InterviewQuestionAudioResponse>(
+    response,
+    '準備題目語音失敗',
+  )
+
+  return body.audio.map((item) => ({
+    questionID: item.question_id,
+    audio: base64ToBlob(item.audio_base64, item.content_type || 'audio/wav'),
+  }))
+}
