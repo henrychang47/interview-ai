@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -10,16 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"interview-ai/backend/internal/config"
-	"interview-ai/backend/internal/llm"
 )
 
 func TestHealthReturnsOK(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
 	response := httptest.NewRecorder()
 
-	newRouter(nil, t.TempDir()).ServeHTTP(response, request)
+	NewRouter(nil, t.TempDir()).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", response.Code)
@@ -46,7 +43,7 @@ func TestRouterLogsHealthRequest(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
 	response := httptest.NewRecorder()
 
-	newRouter(nil, t.TempDir()).ServeHTTP(response, request)
+	NewRouter(nil, t.TempDir()).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", response.Code)
@@ -78,7 +75,7 @@ func TestAudioRouteServesUploadedAudio(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/audio/interview-id/question-id.webm", nil)
 	response := httptest.NewRecorder()
 
-	newRouter(nil, audioDir).ServeHTTP(response, request)
+	NewRouter(nil, audioDir).ServeHTTP(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", response.Code)
@@ -96,33 +93,9 @@ func TestAudioRouteReturnsNotFoundForMissingAudio(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/audio/interview-id/missing.webm", nil)
 	response := httptest.NewRecorder()
 
-	newRouter(nil, audioDir).ServeHTTP(response, request)
+	NewRouter(nil, audioDir).ServeHTTP(response, request)
 
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", response.Code)
-	}
-}
-
-func TestQuestionGeneratorForConfigUsesMockWithoutGeminiKey(t *testing.T) {
-	generator := questionGeneratorForConfig(config.Config{
-		GeminiAPIKey:        "",
-		GeminiModel:         "gemini-2.5-flash",
-		GeminiFallbackModel: "gemini-2.5-flash-lite",
-	}, nil)
-
-	if _, ok := generator.(llm.MockQuestionGenerator); !ok {
-		t.Fatalf("expected MockQuestionGenerator, got %T", generator)
-	}
-}
-
-func TestQuestionGeneratorForConfigUsesGeminiWithGeminiKey(t *testing.T) {
-	generator := questionGeneratorForConfig(config.Config{
-		GeminiAPIKey:        "test-key",
-		GeminiModel:         "gemini-2.5-flash",
-		GeminiFallbackModel: "gemini-2.5-flash-lite",
-	}, nil)
-
-	if _, ok := generator.(*llm.GeminiQuestionGenerator); !ok {
-		t.Fatalf("expected GeminiQuestionGenerator, got %T", generator)
 	}
 }
