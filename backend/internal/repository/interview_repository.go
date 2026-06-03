@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"interview-ai/backend/internal/llm"
 	"interview-ai/backend/internal/model"
@@ -43,8 +44,46 @@ func (r *InterviewRepository) CreateWithQuestions(
 }
 
 func (r *InterviewRepository) CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
+	return createPending(ctx, r.pool, input)
+}
+
+func (r *InterviewRepository) CreatePendingWithCreationLimit(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string, limit int) (model.CreateInterviewResponse, error) {
+	if clientIPHash == "" {
+		return r.CreatePending(ctx, input)
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return model.CreateInterviewResponse{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := reserveInterviewCreation(ctx, tx, clientIPHash, limit); err != nil {
+		return model.CreateInterviewResponse{}, err
+	}
+
+	created, err := createPending(ctx, tx, input)
+	if err != nil {
+		return model.CreateInterviewResponse{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return model.CreateInterviewResponse{}, err
+	}
+
+	return created, nil
+}
+
+type interviewCreator interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func createPending(ctx context.Context, creator interviewCreator, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
 	var interviewID string
-	err := r.pool.QueryRow(ctx, `
+	err := creator.QueryRow(ctx, `
 		INSERT INTO interviews (job_title, job_description, user_profile, question_count, question_language, status)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
@@ -57,6 +96,49 @@ func (r *InterviewRepository) CreatePending(ctx context.Context, input model.Cre
 		ID:     interviewID,
 		Status: model.InterviewStatusGeneratingQuestions,
 	}, nil
+}
+
+func reserveInterviewCreation(ctx context.Context, tx pgx.Tx, clientIPHash string, limit int) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO interview_creation_limits (ip_hash, window_started_at, created_count, updated_at)
+		VALUES ($1, now(), 0, now())
+		ON CONFLICT (ip_hash) DO NOTHING
+	`, clientIPHash)
+	if err != nil {
+		return err
+	}
+
+	var windowStartedAt time.Time
+	var createdCount int
+	var currentTime time.Time
+	if err := tx.QueryRow(ctx, `
+		SELECT window_started_at, created_count, now()
+		FROM interview_creation_limits
+		WHERE ip_hash = $1
+		FOR UPDATE
+	`, clientIPHash).Scan(&windowStartedAt, &createdCount, &currentTime); err != nil {
+		return err
+	}
+
+	if !currentTime.Before(windowStartedAt.Add(24 * time.Hour)) {
+		_, err = tx.Exec(ctx, `
+			UPDATE interview_creation_limits
+			SET window_started_at = $2, created_count = 1, updated_at = $2
+			WHERE ip_hash = $1
+		`, clientIPHash, currentTime)
+		return err
+	}
+
+	if createdCount >= limit {
+		return model.ErrInterviewCreationLimitReached
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE interview_creation_limits
+		SET created_count = created_count + 1, updated_at = $2
+		WHERE ip_hash = $1
+	`, clientIPHash, currentTime)
+	return err
 }
 
 func (r *InterviewRepository) SaveGeneratedQuestions(ctx context.Context, interviewID string, questions []llm.GeneratedQuestion) error {

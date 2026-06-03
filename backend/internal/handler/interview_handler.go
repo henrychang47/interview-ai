@@ -2,11 +2,15 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 
 	"interview-ai/backend/internal/model"
 	"interview-ai/backend/internal/service"
@@ -15,7 +19,7 @@ import (
 )
 
 type InterviewService interface {
-	CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error)
+	CreateInterview(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string) (model.CreateInterviewResponse, error)
 	GetInterview(ctx context.Context, interviewID string) (model.InterviewDetailResponse, error)
 	StartInterview(ctx context.Context, interviewID string) (model.CreateInterviewResponse, error)
 }
@@ -30,8 +34,16 @@ func NewInterviewHandler(interviewService InterviewService, answerService Answer
 }
 
 func NewInterviewHandlerWithTTS(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService) http.Handler {
+	return NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, questionTTSService, "development-ip-hash-salt")
+}
+
+func NewInterviewHandlerWithIPHashSalt(interviewService InterviewService, answerService AnswerService, ipHashSalt string) http.Handler {
+	return NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, nil, ipHashSalt)
+}
+
+func NewInterviewHandlerWithIPHashSaltAndTTS(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService, ipHashSalt string) http.Handler {
 	router := chi.NewRouter()
-	router.Post("/", createInterview(interviewService))
+	router.Post("/", createInterview(interviewService, ipHashSalt))
 	router.Get("/{interviewID}", getInterview(interviewService))
 	router.Post("/{interviewID}/start", startInterview(interviewService))
 	if questionTTSService != nil {
@@ -42,7 +54,7 @@ func NewInterviewHandlerWithTTS(interviewService InterviewService, answerService
 	return router
 }
 
-func createInterview(interviewService InterviewService) http.HandlerFunc {
+func createInterview(interviewService InterviewService, ipHashSalt string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input model.CreateInterviewRequest
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -50,7 +62,8 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 			return
 		}
 
-		response, err := interviewService.CreateInterview(r.Context(), input)
+		clientIPHash := hashClientIP(extractClientIP(r), ipHashSalt)
+		response, err := interviewService.CreateInterview(r.Context(), input, clientIPHash)
 		if err != nil {
 			switch {
 			case errors.Is(err, service.ErrJobTitleRequired),
@@ -59,6 +72,8 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 				errors.Is(err, service.ErrQuestionCountRange),
 				errors.Is(err, service.ErrQuestionLanguageUnsupported):
 				writeError(w, http.StatusBadRequest, err.Error())
+			case errors.Is(err, service.ErrInterviewCreationLimitReached):
+				writeError(w, http.StatusTooManyRequests, "已達今日建立面試上限，請稍後再試。")
 			default:
 				slog.Error("create interview", "error", err)
 				writeError(w, http.StatusInternalServerError, "failed to create interview")
@@ -68,6 +83,47 @@ func createInterview(interviewService InterviewService) http.HandlerFunc {
 
 		writeJSON(w, http.StatusCreated, response)
 	}
+}
+
+func extractClientIP(r *http.Request) string {
+	if forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwardedFor != "" {
+		firstIP := strings.TrimSpace(strings.Split(forwardedFor, ",")[0])
+		if firstIP != "" {
+			return normalizeIP(firstIP)
+		}
+	}
+
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return normalizeIP(realIP)
+	}
+
+	remoteAddr := strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return normalizeIP(host)
+	}
+	return normalizeIP(remoteAddr)
+}
+
+func normalizeIP(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	if host, _, err := net.SplitHostPort(value); err == nil {
+		value = host
+	}
+	if parsedIP := net.ParseIP(value); parsedIP != nil {
+		return parsedIP.String()
+	}
+	return strings.ToLower(value)
+}
+
+func hashClientIP(clientIP string, salt string) string {
+	if strings.TrimSpace(salt) == "" {
+		salt = "development-ip-hash-salt"
+	}
+	hash := sha256.Sum256([]byte(strings.TrimSpace(salt) + ":" + normalizeIP(clientIP)))
+	return hex.EncodeToString(hash[:])
 }
 
 func getInterview(interviewService InterviewService) http.HandlerFunc {

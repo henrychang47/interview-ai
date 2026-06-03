@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestLoadUsesMockLLMWhenGeminiKeyIsMissing(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_HOST", "localhost")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("POSTGRES_USER", "interview_ai")
@@ -50,9 +51,16 @@ func TestLoadUsesMockLLMWhenGeminiKeyIsMissing(t *testing.T) {
 	if cfg.LogLevel != "info" {
 		t.Fatalf("expected default log level info, got %q", cfg.LogLevel)
 	}
+	if cfg.InterviewCreationLimitPer24H != 5 {
+		t.Fatalf("expected default interview creation limit 5, got %d", cfg.InterviewCreationLimitPer24H)
+	}
+	if cfg.IPHashSalt != "development-ip-hash-salt" {
+		t.Fatalf("expected development IP hash salt, got %q", cfg.IPHashSalt)
+	}
 }
 
 func TestLoadTreatsWhitespaceGeminiKeyAsMissing(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_HOST", "localhost")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("POSTGRES_USER", "interview_ai")
@@ -74,6 +82,7 @@ func TestLoadTreatsWhitespaceGeminiKeyAsMissing(t *testing.T) {
 }
 
 func TestLoadReadsGeminiConfig(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_HOST", "localhost")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("POSTGRES_USER", "interview_ai")
@@ -120,7 +129,28 @@ func TestLoadReadsGeminiConfig(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDevelopmentIPHashSaltOutsideDevelopment(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "interview_ai")
+	t.Setenv("POSTGRES_PASSWORD", "password")
+	t.Setenv("POSTGRES_DB", "interview_ai")
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GEMINI_MODEL", "")
+	t.Setenv("GEMINI_FALLBACK_MODEL", "")
+	t.Setenv("INTERVIEW_CREATION_LIMIT_PER_24H", "5")
+	t.Setenv("IP_HASH_SALT", "development-ip-hash-salt")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to reject development IP hash salt outside development")
+	}
+}
+
 func TestLoadReadsLogLevel(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_HOST", "localhost")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("POSTGRES_USER", "interview_ai")
@@ -141,7 +171,74 @@ func TestLoadReadsLogLevel(t *testing.T) {
 	}
 }
 
+func TestLoadReadsInterviewCreationLimitAndIPHashSalt(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "interview_ai")
+	t.Setenv("POSTGRES_PASSWORD", "password")
+	t.Setenv("POSTGRES_DB", "interview_ai")
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GEMINI_MODEL", "")
+	t.Setenv("GEMINI_FALLBACK_MODEL", "")
+	t.Setenv("INTERVIEW_CREATION_LIMIT_PER_24H", "7")
+	t.Setenv("IP_HASH_SALT", "production-salt")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.InterviewCreationLimitPer24H != 7 {
+		t.Fatalf("expected interview creation limit 7, got %d", cfg.InterviewCreationLimitPer24H)
+	}
+	if cfg.IPHashSalt != "production-salt" {
+		t.Fatalf("expected configured IP hash salt, got %q", cfg.IPHashSalt)
+	}
+}
+
+func TestLoadRejectsInvalidInterviewCreationLimit(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "interview_ai")
+	t.Setenv("POSTGRES_PASSWORD", "password")
+	t.Setenv("POSTGRES_DB", "interview_ai")
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GEMINI_MODEL", "")
+	t.Setenv("GEMINI_FALLBACK_MODEL", "")
+	t.Setenv("INTERVIEW_CREATION_LIMIT_PER_24H", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to reject non-positive interview creation limit")
+	}
+}
+
+func TestLoadRequiresIPHashSaltOutsideDevelopment(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_PORT", "5432")
+	t.Setenv("POSTGRES_USER", "interview_ai")
+	t.Setenv("POSTGRES_PASSWORD", "password")
+	t.Setenv("POSTGRES_DB", "interview_ai")
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GEMINI_MODEL", "")
+	t.Setenv("GEMINI_FALLBACK_MODEL", "")
+	t.Setenv("INTERVIEW_CREATION_LIMIT_PER_24H", "5")
+	t.Setenv("IP_HASH_SALT", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to require IP_HASH_SALT outside development")
+	}
+}
+
 func TestLoadRejectsInvalidLogLevel(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_HOST", "localhost")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("POSTGRES_USER", "interview_ai")

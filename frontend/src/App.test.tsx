@@ -422,6 +422,33 @@ describe('App', () => {
     expect(await screen.findByText('job_title is required')).toBeInTheDocument()
   })
 
+  it('shows the creation limit message when create interview is rate limited', async () => {
+    installMediaRecorderMock()
+    installObjectURLMock()
+    mockPathname('/interviews/new')
+    vi.stubGlobal(
+      'fetch',
+      mockFetchOnce({ error: '已達今日建立面試上限，請稍後再試。' }, { status: 429 }),
+    )
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('職位名稱'), { target: { value: '後端工程師' } })
+    fireEvent.change(screen.getByLabelText('職位要求及說明'), {
+      target: { value: '需要熟悉 Go' },
+    })
+    fireEvent.change(screen.getByLabelText('個人資訊'), {
+      target: { value: '有 Go 學習經驗' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(await screen.findByRole('button', { name: '測試麥克風' }))
+    fireEvent.click(await screen.findByRole('button', { name: '停止錄音' }))
+    expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
+
+    expect(await screen.findByText('已達今日建立面試上限，請稍後再試。')).toBeInTheDocument()
+  })
+
   it('shows question preparation while questions are generating', async () => {
     vi.useFakeTimers()
     mockPathname('/interviews/interview-123')

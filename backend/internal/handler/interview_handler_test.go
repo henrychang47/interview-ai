@@ -45,6 +45,65 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 	}
 }
 
+func TestCreateInterviewPassesHashedForwardedIP(t *testing.T) {
+	stub := &stubInterviewService{
+		response: model.CreateInterviewResponse{
+			ID:     "interview-id",
+			Status: model.InterviewStatusGeneratingQuestions,
+		},
+	}
+	handler := NewInterviewHandlerWithIPHashSalt(stub, nil, "test-salt")
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
+		"job_title":"後端工程師",
+		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
+		"user_profile":"有 Java 和 Go 學習經驗",
+		"question_count":3
+	}`))
+	request.Header.Set("X-Forwarded-For", " 203.0.113.10, 198.51.100.2 ")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", response.Code)
+	}
+	expectedHash := "98a413f88ca1681c77823eb5320b2fee0b2c5eb31b937f7cc49a08b8b3b747ff"
+	if stub.clientIPHash != expectedHash {
+		t.Fatalf("expected hashed client IP %q, got %q", expectedHash, stub.clientIPHash)
+	}
+	if stub.clientIPHash == "203.0.113.10" {
+		t.Fatal("expected raw IP not to be passed to service")
+	}
+}
+
+func TestCreateInterviewNormalizesForwardedIPWithPort(t *testing.T) {
+	stub := &stubInterviewService{
+		response: model.CreateInterviewResponse{
+			ID:     "interview-id",
+			Status: model.InterviewStatusGeneratingQuestions,
+		},
+	}
+	handler := NewInterviewHandlerWithIPHashSalt(stub, nil, "test-salt")
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
+		"job_title":"後端工程師",
+		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
+		"user_profile":"有 Java 和 Go 學習經驗",
+		"question_count":3
+	}`))
+	request.Header.Set("X-Forwarded-For", "203.0.113.10:54321")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", response.Code)
+	}
+	expectedHash := "98a413f88ca1681c77823eb5320b2fee0b2c5eb31b937f7cc49a08b8b3b747ff"
+	if stub.clientIPHash != expectedHash {
+		t.Fatalf("expected forwarded IP with port to hash as bare IP %q, got %q", expectedHash, stub.clientIPHash)
+	}
+}
+
 func TestCreateInterviewRejectsInvalidJSON(t *testing.T) {
 	handler := NewInterviewHandler(&stubInterviewService{}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{`))
@@ -68,6 +127,21 @@ func TestCreateInterviewReturnsValidationError(t *testing.T) {
 	handler.ServeHTTP(response, request)
 
 	assertErrorResponse(t, response, http.StatusBadRequest, "job_title is required")
+}
+
+func TestCreateInterviewReturnsLimitError(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrInterviewCreationLimitReached}, nil)
+	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
+		"job_title":"後端工程師",
+		"job_description":"需要熟悉 Go",
+		"user_profile":"有 Go 學習經驗",
+		"question_count":3
+	}`))
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusTooManyRequests, "已達今日建立面試上限，請稍後再試。")
 }
 
 func TestCreateInterviewReturnsServerError(t *testing.T) {
@@ -269,13 +343,15 @@ func assertErrorResponse(t *testing.T, response *httptest.ResponseRecorder, stat
 type stubInterviewService struct {
 	response       model.CreateInterviewResponse
 	err            error
+	clientIPHash   string
 	detailResponse model.InterviewDetailResponse
 	getErr         error
 	startResponse  model.CreateInterviewResponse
 	startErr       error
 }
 
-func (s *stubInterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
+func (s *stubInterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string) (model.CreateInterviewResponse, error) {
+	s.clientIPHash = clientIPHash
 	return s.response, s.err
 }
 

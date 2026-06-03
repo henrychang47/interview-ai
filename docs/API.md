@@ -74,6 +74,16 @@ Validation errors:
 {"error":"question_language must be zh-TW or en-US"}
 ```
 
+Rate limit:
+
+```http
+429 Too Many Requests
+```
+
+```json
+{"error":"已達今日建立面試上限，請稍後再試。"}
+```
+
 Server error:
 
 ```json
@@ -86,8 +96,20 @@ Question generation:
 - If `GEMINI_API_KEY` is set, the backend calls Gemini to generate questions from `job_title`, `job_description`, and `user_profile`.
 - `question_language` must be `zh-TW` or `en-US`. Empty values default to `zh-TW`.
 - The create API returns immediately with `generating_questions`; question generation finishes in the background.
+- Each hashed client IP can create up to `INTERVIEW_CREATION_LIMIT_PER_24H` interviews within a 24-hour window. The backend uses `X-Forwarded-For`, then `X-Real-IP`, then `RemoteAddr`, hashes the normalized IP with `IP_HASH_SALT`, and stores only the hash.
 - Gemini requests use `google.golang.org/genai` v1.58.0 with `GEMINI_MODEL` first and fall back to `GEMINI_FALLBACK_MODEL` after retrying transient `429` / `RESOURCE_EXHAUSTED` or `503` / `UNAVAILABLE` failures.
 - The backend validates the LLM JSON response before saving questions.
+
+Curl verification:
+
+```bash
+curl -X POST http://localhost:8080/api/interviews \
+  -H "Content-Type: application/json" \
+  -H "X-Forwarded-For: 203.0.113.10" \
+  -d '{"job_title":"後端工程師","job_description":"需要熟悉 Go","user_profile":"有 Go 經驗","question_count":3,"question_language":"zh-TW"}'
+```
+
+Run the same request 6 times with the default `INTERVIEW_CREATION_LIMIT_PER_24H=5`; the 6th response should be `429`.
 
 ## Get Interview
 

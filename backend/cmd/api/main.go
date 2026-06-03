@@ -45,10 +45,10 @@ func main() {
 	answerAnalysisQueue := service.NewBackgroundAnswerAnalysisQueue(context.Background(), answerRepository, answerAnalyzer)
 	answerAudioRetention := service.NewAnswerAudioRetentionService(answerRepository, audioStorage)
 	service.StartAnswerAudioRetentionJob(context.Background(), answerAudioRetention, 72*time.Hour, time.Hour)
-	interviewService := service.NewInterviewService(questionGenerator, interviewRepository)
+	interviewService := service.NewInterviewServiceWithCreationLimit(questionGenerator, interviewRepository, cfg.InterviewCreationLimitPer24H)
 	questionTTSService := service.NewQuestionTTSService(interviewRepository, questionTTSGenerator)
 	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
-	interviewHandler := handler.NewInterviewHandlerWithTTS(interviewService, answerService, questionTTSService)
+	interviewHandler := handler.NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, questionTTSService, cfg.IPHashSalt)
 
 	slog.Info("starting interview-ai backend", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", server.NewRouter(interviewHandler, "storage/audio")); err != nil {

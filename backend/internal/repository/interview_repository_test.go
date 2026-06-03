@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 
 	"interview-ai/backend/internal/llm"
@@ -109,6 +110,281 @@ func TestCreatePendingPersistsGeneratingInterviewWithLanguage(t *testing.T) {
 	}
 	if status != model.InterviewStatusGeneratingQuestions || language != model.QuestionLanguageEnUS {
 		t.Fatalf("unexpected status/language: %q/%q", status, language)
+	}
+}
+
+func TestCreatePendingWithCreationLimitRejectsSixthCreateWithinWindow(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+	ipHash := "test-limit-hash"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interview_creation_limits WHERE ip_hash = $1", ipHash)
+	})
+
+	for index := 0; index < 5; index++ {
+		response, err := repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+			JobTitle:         "Backend Engineer",
+			JobDescription:   "Build APIs",
+			UserProfile:      "Go experience",
+			QuestionCount:    1,
+			QuestionLanguage: model.QuestionLanguageEnUS,
+		}, ipHash, 5)
+		if err != nil {
+			t.Fatalf("create %d returned error: %v", index+1, err)
+		}
+		t.Cleanup(func() {
+			_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", response.ID)
+		})
+	}
+
+	_, err = repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+		JobTitle:         "Backend Engineer",
+		JobDescription:   "Build APIs",
+		UserProfile:      "Go experience",
+		QuestionCount:    1,
+		QuestionLanguage: model.QuestionLanguageEnUS,
+	}, ipHash, 5)
+
+	if !errors.Is(err, model.ErrInterviewCreationLimitReached) {
+		t.Fatalf("expected ErrInterviewCreationLimitReached, got %v", err)
+	}
+}
+
+func TestCreatePendingWithCreationLimitSerializesConcurrentCreates(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+	ipHash := "test-concurrent-limit-hash"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interview_creation_limits WHERE ip_hash = $1", ipHash)
+	})
+
+	const requestCount = 8
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(requestCount)
+	results := make(chan error, requestCount)
+	createdIDs := make(chan string, requestCount)
+
+	for index := 0; index < requestCount; index++ {
+		go func() {
+			defer waitGroup.Done()
+			response, err := repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+				JobTitle:         "Backend Engineer",
+				JobDescription:   "Build APIs",
+				UserProfile:      "Go experience",
+				QuestionCount:    1,
+				QuestionLanguage: model.QuestionLanguageEnUS,
+			}, ipHash, 5)
+			if err == nil {
+				createdIDs <- response.ID
+			}
+			results <- err
+		}()
+	}
+
+	waitGroup.Wait()
+	close(results)
+	close(createdIDs)
+
+	successCount := 0
+	limitErrorCount := 0
+	for err := range results {
+		switch {
+		case err == nil:
+			successCount++
+		case errors.Is(err, model.ErrInterviewCreationLimitReached):
+			limitErrorCount++
+		default:
+			t.Fatalf("unexpected create error: %v", err)
+		}
+	}
+	for createdID := range createdIDs {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", createdID)
+	}
+	if successCount != 5 {
+		t.Fatalf("expected exactly 5 successful creates, got %d", successCount)
+	}
+	if limitErrorCount != requestCount-5 {
+		t.Fatalf("expected %d limit errors, got %d", requestCount-5, limitErrorCount)
+	}
+
+	var createdCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT created_count
+		FROM interview_creation_limits
+		WHERE ip_hash = $1
+	`, ipHash).Scan(&createdCount); err != nil {
+		t.Fatalf("query created count: %v", err)
+	}
+	if createdCount != 5 {
+		t.Fatalf("expected created_count 5 after concurrent creates, got %d", createdCount)
+	}
+}
+
+func TestCreatePendingWithCreationLimitResetsExpiredWindow(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+	ipHash := "test-expired-window-hash"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interview_creation_limits WHERE ip_hash = $1", ipHash)
+	})
+	_, err = pool.Exec(ctx, `
+		INSERT INTO interview_creation_limits (ip_hash, window_started_at, created_count, updated_at)
+		VALUES ($1, now() - interval '25 hours', 5, now() - interval '25 hours')
+	`, ipHash)
+	if err != nil {
+		t.Fatalf("seed expired limit: %v", err)
+	}
+
+	response, err := repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+		JobTitle:         "Backend Engineer",
+		JobDescription:   "Build APIs",
+		UserProfile:      "Go experience",
+		QuestionCount:    1,
+		QuestionLanguage: model.QuestionLanguageEnUS,
+	}, ipHash, 5)
+	if err != nil {
+		t.Fatalf("CreatePendingWithCreationLimit returned error after expired window: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", response.ID)
+	})
+
+	var createdCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT created_count
+		FROM interview_creation_limits
+		WHERE ip_hash = $1
+	`, ipHash).Scan(&createdCount); err != nil {
+		t.Fatalf("query created count: %v", err)
+	}
+	if createdCount != 1 {
+		t.Fatalf("expected reset created_count 1, got %d", createdCount)
+	}
+}
+
+func TestCreatePendingWithCreationLimitStoresOnlyHash(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+	rawIP := "203.0.113.10"
+	ipHash := "98a413f88ca1681c77823eb5320b2fee0b2c5eb31b937f7cc49a08b8b3b747ff"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interview_creation_limits WHERE ip_hash = $1", ipHash)
+	})
+
+	response, err := repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+		JobTitle:         "Backend Engineer",
+		JobDescription:   "Build APIs",
+		UserProfile:      "Go experience",
+		QuestionCount:    1,
+		QuestionLanguage: model.QuestionLanguageEnUS,
+	}, ipHash, 5)
+	if err != nil {
+		t.Fatalf("CreatePendingWithCreationLimit returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", response.ID)
+	})
+
+	var storedKey string
+	if err := pool.QueryRow(ctx, `
+		SELECT ip_hash
+		FROM interview_creation_limits
+		WHERE ip_hash = $1
+	`, ipHash).Scan(&storedKey); err != nil {
+		t.Fatalf("query limit key: %v", err)
+	}
+	if storedKey == rawIP {
+		t.Fatal("expected raw IP not to be stored")
+	}
+	if storedKey != ipHash {
+		t.Fatalf("expected stored hash %q, got %q", ipHash, storedKey)
+	}
+}
+
+func TestCreatePendingWithCreationLimitRollsBackLimitWhenInterviewInsertFails(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+	ipHash := "test-rollback-hash"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM interview_creation_limits WHERE ip_hash = $1", ipHash)
+	})
+
+	_, err = repository.CreatePendingWithCreationLimit(ctx, model.CreateInterviewRequest{
+		JobTitle:         "Backend Engineer",
+		JobDescription:   "Build APIs",
+		UserProfile:      "Go experience",
+		QuestionCount:    99,
+		QuestionLanguage: model.QuestionLanguageEnUS,
+	}, ipHash, 5)
+	if err == nil {
+		t.Fatal("expected invalid interview insert to fail")
+	}
+
+	var limitRows int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM interview_creation_limits
+		WHERE ip_hash = $1
+	`, ipHash).Scan(&limitRows); err != nil {
+		t.Fatalf("query limit rows: %v", err)
+	}
+	if limitRows != 0 {
+		t.Fatalf("expected creation limit row to roll back, got %d rows", limitRows)
 	}
 }
 

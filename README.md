@@ -41,6 +41,7 @@ docker compose exec postgres psql -U interview_ai -d interview_ai -c "\dt"
 Expected tables:
 
 - `interviews`
+- `interview_creation_limits`
 - `questions`
 - `answers`
 

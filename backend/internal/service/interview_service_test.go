@@ -21,7 +21,7 @@ func TestCreateInterviewCreatesGeneratingInterviewAndStartsQuestionGeneration(t 
 		UserProfile:      " 有 Java 和 Go 學習經驗 ",
 		QuestionCount:    3,
 		QuestionLanguage: model.QuestionLanguageZhTW,
-	})
+	}, "client-ip-hash")
 
 	if err != nil {
 		t.Fatalf("CreateInterview returned error: %v", err)
@@ -47,6 +47,12 @@ func TestCreateInterviewCreatesGeneratingInterviewAndStartsQuestionGeneration(t 
 	if repository.savedQuestionsInterviewID != "interview-id" {
 		t.Fatalf("expected generated questions saved for interview-id, got %q", repository.savedQuestionsInterviewID)
 	}
+	if repository.clientIPHash != "client-ip-hash" {
+		t.Fatalf("expected creation limit client IP hash, got %q", repository.clientIPHash)
+	}
+	if repository.creationLimit != 5 {
+		t.Fatalf("expected default creation limit 5, got %d", repository.creationLimit)
+	}
 }
 
 func TestCreateInterviewDefaultsQuestionLanguageToZhTW(t *testing.T) {
@@ -56,7 +62,7 @@ func TestCreateInterviewDefaultsQuestionLanguageToZhTW(t *testing.T) {
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = ""
-	}))
+	}), "client-ip-hash")
 
 	if err != nil {
 		t.Fatalf("CreateInterview returned error: %v", err)
@@ -71,7 +77,7 @@ func TestCreateInterviewRejectsUnsupportedQuestionLanguage(t *testing.T) {
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = "ja-JP"
-	}))
+	}), "client-ip-hash")
 
 	if !errors.Is(err, ErrQuestionLanguageUnsupported) {
 		t.Fatalf("expected ErrQuestionLanguageUnsupported, got %v", err)
@@ -85,7 +91,7 @@ func TestCreateInterviewMarksQuestionGenerationFailed(t *testing.T) {
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = model.QuestionLanguageEnUS
-	}))
+	}), "client-ip-hash")
 
 	if err != nil {
 		t.Fatalf("CreateInterview should return created interview before background failure, got %v", err)
@@ -100,10 +106,41 @@ func TestCreateInterviewRequiresJobTitle(t *testing.T) {
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.JobTitle = " "
-	}))
+	}), "client-ip-hash")
 
 	if !errors.Is(err, ErrJobTitleRequired) {
 		t.Fatalf("expected ErrJobTitleRequired, got %v", err)
+	}
+}
+
+func TestCreateInterviewDoesNotConsumeLimitForValidationError(t *testing.T) {
+	repository := &stubInterviewRepository{}
+	service := NewInterviewService(&stubQuestionGenerator{}, repository)
+
+	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
+		input.JobTitle = " "
+	}), "client-ip-hash")
+
+	if !errors.Is(err, ErrJobTitleRequired) {
+		t.Fatalf("expected ErrJobTitleRequired, got %v", err)
+	}
+	if repository.createPendingCalled {
+		t.Fatal("expected validation error not to create interview or consume creation limit")
+	}
+}
+
+func TestCreateInterviewReturnsCreationLimitError(t *testing.T) {
+	generator := &stubQuestionGenerator{}
+	repository := &stubInterviewRepository{createErr: ErrInterviewCreationLimitReached}
+	service := NewInterviewServiceWithRunner(generator, repository, func(task func()) { task() })
+
+	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {}), "client-ip-hash")
+
+	if !errors.Is(err, ErrInterviewCreationLimitReached) {
+		t.Fatalf("expected ErrInterviewCreationLimitReached, got %v", err)
+	}
+	if generator.input.JobTitle != "" {
+		t.Fatal("expected question generation not to start when creation limit is reached")
 	}
 }
 
@@ -113,7 +150,7 @@ func TestCreateInterviewRequiresQuestionCountBetweenOneAndTen(t *testing.T) {
 	for _, count := range []int{0, 11} {
 		_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 			input.QuestionCount = count
-		}))
+		}), "client-ip-hash")
 		if !errors.Is(err, ErrQuestionCountRange) {
 			t.Fatalf("expected ErrQuestionCountRange for %d, got %v", count, err)
 		}
@@ -298,6 +335,10 @@ func (s *stubQuestionGenerator) GenerateQuestions(ctx context.Context, input llm
 
 type stubInterviewRepository struct {
 	input                     model.CreateInterviewRequest
+	clientIPHash              string
+	creationLimit             int
+	createErr                 error
+	createPendingCalled       bool
 	savedQuestions            []llm.GeneratedQuestion
 	savedQuestionsInterviewID string
 	failedInterviewID         string
@@ -309,8 +350,14 @@ type stubInterviewRepository struct {
 	requestedID               string
 }
 
-func (s *stubInterviewRepository) CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
+func (s *stubInterviewRepository) CreatePendingWithCreationLimit(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string, limit int) (model.CreateInterviewResponse, error) {
+	s.createPendingCalled = true
 	s.input = input
+	s.clientIPHash = clientIPHash
+	s.creationLimit = limit
+	if s.createErr != nil {
+		return model.CreateInterviewResponse{}, s.createErr
+	}
 	return model.CreateInterviewResponse{
 		ID:     "interview-id",
 		Status: model.InterviewStatusGeneratingQuestions,

@@ -2,6 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
+      APP_ENV: ${APP_ENV:-development}
+      INTERVIEW_CREATION_LIMIT_PER_24H: ${INTERVIEW_CREATION_LIMIT_PER_24H:-5}
+      IP_HASH_SALT: ${IP_HASH_SALT:-}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

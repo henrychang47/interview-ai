@@ -13,18 +13,19 @@ import (
 )
 
 var (
-	ErrJobTitleRequired             = errors.New("job_title is required")
-	ErrJobDescriptionRequired       = errors.New("job_description is required")
-	ErrUserProfileRequired          = errors.New("user_profile is required")
-	ErrQuestionCountRange           = errors.New("question_count must be between 1 and 10")
-	ErrQuestionLanguageUnsupported  = errors.New("question_language must be zh-TW or en-US")
-	ErrInterviewNotReady            = model.ErrInterviewNotReady
-	ErrInterviewNotFound            = model.ErrInterviewNotFound
-	ErrQuestionNotFoundForInterview = errors.New("question not found for interview")
+	ErrJobTitleRequired              = errors.New("job_title is required")
+	ErrJobDescriptionRequired        = errors.New("job_description is required")
+	ErrUserProfileRequired           = errors.New("user_profile is required")
+	ErrQuestionCountRange            = errors.New("question_count must be between 1 and 10")
+	ErrQuestionLanguageUnsupported   = errors.New("question_language must be zh-TW or en-US")
+	ErrInterviewNotReady             = model.ErrInterviewNotReady
+	ErrInterviewNotFound             = model.ErrInterviewNotFound
+	ErrInterviewCreationLimitReached = model.ErrInterviewCreationLimitReached
+	ErrQuestionNotFoundForInterview  = errors.New("question not found for interview")
 )
 
 type InterviewRepository interface {
-	CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error)
+	CreatePendingWithCreationLimit(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string, limit int) (model.CreateInterviewResponse, error)
 	SaveGeneratedQuestions(ctx context.Context, interviewID string, questions []llm.GeneratedQuestion) error
 	MarkQuestionGenerationFailed(ctx context.Context, interviewID string) error
 	GetByID(ctx context.Context, interviewID string) (model.InterviewDetail, error)
@@ -34,9 +35,10 @@ type InterviewRepository interface {
 type asyncRunner func(func())
 
 type InterviewService struct {
-	generator  llm.QuestionGenerator
-	repository InterviewRepository
-	runner     asyncRunner
+	generator           llm.QuestionGenerator
+	repository          InterviewRepository
+	runner              asyncRunner
+	creationLimitPer24H int
 }
 
 func defaultAsyncRunner(task func()) {
@@ -44,14 +46,30 @@ func defaultAsyncRunner(task func()) {
 }
 
 func NewInterviewService(generator llm.QuestionGenerator, repository InterviewRepository) *InterviewService {
-	return NewInterviewServiceWithRunner(generator, repository, defaultAsyncRunner)
+	return NewInterviewServiceWithCreationLimit(generator, repository, 5)
 }
 
 func NewInterviewServiceWithRunner(generator llm.QuestionGenerator, repository InterviewRepository, runner asyncRunner) *InterviewService {
-	return &InterviewService{generator: generator, repository: repository, runner: runner}
+	return NewInterviewServiceWithCreationLimitAndRunner(generator, repository, 5, runner)
 }
 
-func (s *InterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
+func NewInterviewServiceWithCreationLimit(generator llm.QuestionGenerator, repository InterviewRepository, creationLimitPer24H int) *InterviewService {
+	return NewInterviewServiceWithCreationLimitAndRunner(generator, repository, creationLimitPer24H, defaultAsyncRunner)
+}
+
+func NewInterviewServiceWithCreationLimitAndRunner(generator llm.QuestionGenerator, repository InterviewRepository, creationLimitPer24H int, runner asyncRunner) *InterviewService {
+	if creationLimitPer24H <= 0 {
+		creationLimitPer24H = 5
+	}
+	return &InterviewService{
+		generator:           generator,
+		repository:          repository,
+		runner:              runner,
+		creationLimitPer24H: creationLimitPer24H,
+	}
+}
+
+func (s *InterviewService) CreateInterview(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string) (model.CreateInterviewResponse, error) {
 	input.JobTitle = strings.TrimSpace(input.JobTitle)
 	input.JobDescription = strings.TrimSpace(input.JobDescription)
 	input.UserProfile = strings.TrimSpace(input.UserProfile)
@@ -75,7 +93,7 @@ func (s *InterviewService) CreateInterview(ctx context.Context, input model.Crea
 		return model.CreateInterviewResponse{}, ErrQuestionLanguageUnsupported
 	}
 
-	created, err := s.repository.CreatePending(ctx, input)
+	created, err := s.repository.CreatePendingWithCreationLimit(ctx, input, clientIPHash, s.creationLimitPer24H)
 	if err != nil {
 		return model.CreateInterviewResponse{}, err
 	}
