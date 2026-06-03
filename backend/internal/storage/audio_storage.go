@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-type AudioStorage interface {
-	SaveAnswerAudio(ctx context.Context, interviewID string, questionID string, file io.Reader) (string, error)
-	DeleteAnswerAudio(ctx context.Context, audioPath string) error
-}
-
 type LocalAudioStorage struct {
 	root string
 }
@@ -43,6 +38,8 @@ func (s *LocalAudioStorage) SaveAnswerAudio(ctx context.Context, interviewID str
 	defer destination.Close()
 
 	if _, err := io.Copy(destination, file); err != nil {
+		_ = destination.Close()
+		_ = os.Remove(filePath)
 		return "", err
 	}
 

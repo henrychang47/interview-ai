@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"interview-ai/backend/internal/model"
 )
@@ -122,6 +123,34 @@ func TestAnswerAnalysisWorkerMarksFailedWhenContextLookupFails(t *testing.T) {
 	}
 	if analyzer.called {
 		t.Fatal("expected analyzer not to be called when context lookup fails")
+	}
+}
+
+func TestBackgroundAnswerAnalysisQueueAppliesBackpressureWhenFull(t *testing.T) {
+	queue := &BackgroundAnswerAnalysisQueue{
+		jobs:   make(chan AnswerAnalysisJob, 1),
+		worker: NewAnswerAnalysisWorker(&stubAnswerAnalysisRepository{}, &stubAnswerAnalyzer{}),
+	}
+	queue.jobs <- AnswerAnalysisJob{AnswerID: "queued"}
+
+	done := make(chan struct{})
+	go func() {
+		queue.Enqueue(AnswerAnalysisJob{AnswerID: "blocked"})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("expected enqueue to wait when queue is full")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	<-queue.jobs
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected enqueue to finish after queue has capacity")
 	}
 }
 

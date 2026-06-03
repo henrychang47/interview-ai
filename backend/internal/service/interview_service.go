@@ -19,7 +19,7 @@ var (
 	ErrQuestionCountRange           = errors.New("question_count must be between 1 and 10")
 	ErrQuestionLanguageUnsupported  = errors.New("question_language must be zh-TW or en-US")
 	ErrInterviewNotReady            = model.ErrInterviewNotReady
-	ErrInterviewNotFound            = errors.New("interview not found")
+	ErrInterviewNotFound            = model.ErrInterviewNotFound
 	ErrQuestionNotFoundForInterview = errors.New("question not found for interview")
 )
 

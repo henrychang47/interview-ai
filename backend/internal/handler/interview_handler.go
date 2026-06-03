@@ -95,6 +95,8 @@ func startInterview(interviewService InterviewService) http.HandlerFunc {
 		response, err := interviewService.StartInterview(r.Context(), interviewID)
 		if err != nil {
 			switch {
+			case errors.Is(err, service.ErrInterviewNotFound):
+				writeError(w, http.StatusNotFound, err.Error())
 			case errors.Is(err, service.ErrInterviewNotReady):
 				writeError(w, http.StatusConflict, err.Error())
 			default:

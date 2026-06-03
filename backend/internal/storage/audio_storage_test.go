@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +60,25 @@ func TestLocalAudioStorageDeletesAnswerAudio(t *testing.T) {
 	}
 }
 
+func TestLocalAudioStorageRemovesPartialFileWhenSaveFails(t *testing.T) {
+	root := t.TempDir()
+	storage := NewLocalAudioStorage(root)
+
+	_, err := storage.SaveAnswerAudio(
+		context.Background(),
+		"interview-id",
+		"question-id",
+		&errAfterReader{content: "partial-bytes"},
+	)
+
+	if err == nil {
+		t.Fatal("expected save error")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "interview-id", "question-id.webm")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected partial file to be removed, got stat err %v", statErr)
+	}
+}
+
 func TestLocalAudioStorageDeleteAnswerAudioTreatsMissingFileAsDeleted(t *testing.T) {
 	storage := NewLocalAudioStorage(t.TempDir())
 
@@ -77,3 +98,19 @@ func TestLocalAudioStorageDeleteAnswerAudioRejectsPathOutsideAudioRoot(t *testin
 		t.Fatal("expected path outside audio root to be rejected")
 	}
 }
+
+type errAfterReader struct {
+	content string
+	read    bool
+}
+
+func (r *errAfterReader) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, errors.New("read failed")
+	}
+	copy(p, r.content)
+	r.read = true
+	return len(r.content), nil
+}
+
+var _ io.Reader = (*errAfterReader)(nil)

@@ -171,6 +171,16 @@ func TestStartInterviewReturnsNotReady(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusConflict, "interview is not ready to start")
 }
 
+func TestStartInterviewReturnsNotFound(t *testing.T) {
+	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotFound}, nil)
+	request := httptest.NewRequest(http.MethodPost, "/missing-id/start", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusNotFound, "interview not found")
+}
+
 func TestGenerateQuestionTTSReturnsWAVAudio(t *testing.T) {
 	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
 		audio: []byte("wav-bytes"),

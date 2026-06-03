@@ -117,6 +117,19 @@ func (r *InterviewRepository) Start(ctx context.Context, interviewID string) (mo
 	`, interviewID, model.InterviewStatusInProgress, model.InterviewStatusQuestionsReady).Scan(&response.ID, &response.Status)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			var exists bool
+			if existsErr := r.pool.QueryRow(ctx, `
+				SELECT EXISTS (
+					SELECT 1
+					FROM interviews
+					WHERE id = $1
+				)
+			`, interviewID).Scan(&exists); existsErr != nil {
+				return model.CreateInterviewResponse{}, existsErr
+			}
+			if !exists {
+				return model.CreateInterviewResponse{}, model.ErrInterviewNotFound
+			}
 			return model.CreateInterviewResponse{}, ErrInterviewNotReady
 		}
 		return model.CreateInterviewResponse{}, err

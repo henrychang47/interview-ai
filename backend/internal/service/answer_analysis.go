@@ -116,11 +116,7 @@ func (q *BackgroundAnswerAnalysisQueue) Enqueue(job AnswerAnalysisJob) {
 		return
 	}
 
-	select {
-	case q.jobs <- job:
-	default:
-		go q.worker.Process(context.Background(), job)
-	}
+	q.jobs <- job
 }
 
 func (q *BackgroundAnswerAnalysisQueue) run(ctx context.Context) {

@@ -75,6 +75,22 @@ func TestUploadAnswerRequiresMultipartAudio(t *testing.T) {
 	assertErrorResponse(t, response, http.StatusBadRequest, "audio file is required")
 }
 
+func TestUploadAnswerRejectsOversizedRequest(t *testing.T) {
+	answerService := &stubAnswerService{}
+	handler := NewInterviewHandler(&stubInterviewService{}, answerService)
+	body, contentType := multipartBodyBytes(t, "audio", "answer.webm", "audio/webm", bytes.Repeat([]byte("a"), maxAnswerAudioBytes+1))
+	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
+	request.Header.Set("Content-Type", contentType)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	assertErrorResponse(t, response, http.StatusRequestEntityTooLarge, "audio file is too large")
+	if answerService.called {
+		t.Fatal("expected answer service not to be called for oversized request")
+	}
+}
+
 func TestUploadAnswerMapsValidationErrors(t *testing.T) {
 	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrUnsupportedAudioType})
 	body, contentType := multipartBody(t, "audio", "answer.wav", "audio/wav", "wav-bytes")
@@ -112,6 +128,10 @@ func TestUploadAnswerMapsStorageErrors(t *testing.T) {
 }
 
 func multipartBody(t *testing.T, fieldName string, fileName string, contentType string, content string) (*bytes.Buffer, string) {
+	return multipartBodyBytes(t, fieldName, fileName, contentType, []byte(content))
+}
+
+func multipartBodyBytes(t *testing.T, fieldName string, fileName string, contentType string, content []byte) (*bytes.Buffer, string) {
 	t.Helper()
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -122,7 +142,7 @@ func multipartBody(t *testing.T, fieldName string, fileName string, contentType 
 	if err != nil {
 		t.Fatalf("create multipart part: %v", err)
 	}
-	if _, err := part.Write([]byte(content)); err != nil {
+	if _, err := part.Write(content); err != nil {
 		t.Fatalf("write multipart part: %v", err)
 	}
 	if err := writer.Close(); err != nil {
@@ -140,9 +160,11 @@ type stubAnswerService struct {
 	input    service.UploadAnswerInput
 	response model.UploadAnswerResponse
 	err      error
+	called   bool
 }
 
 func (s *stubAnswerService) UploadAnswer(ctx context.Context, input service.UploadAnswerInput) (model.UploadAnswerResponse, error) {
+	s.called = true
 	s.input = input
 	if s.err != nil {
 		return model.UploadAnswerResponse{}, s.err

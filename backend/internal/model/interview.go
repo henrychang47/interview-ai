@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-var ErrInterviewNotReady = errors.New("interview is not ready to start")
+var (
+	ErrInterviewNotFound = errors.New("interview not found")
+	ErrInterviewNotReady = errors.New("interview is not ready to start")
+)
 
 const (
 	InterviewStatusCreated             = "created"

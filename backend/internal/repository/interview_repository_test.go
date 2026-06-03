@@ -278,6 +278,27 @@ func TestStartRejectsInterviewThatIsNotReady(t *testing.T) {
 	}
 }
 
+func TestStartReturnsNotFoundForMissingInterview(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect database: %v", err)
+	}
+	defer pool.Close()
+
+	repository := NewInterviewRepository(pool)
+
+	_, err = repository.Start(ctx, "00000000-0000-0000-0000-000000000000")
+	if !errors.Is(err, model.ErrInterviewNotFound) {
+		t.Fatalf("expected ErrInterviewNotFound, got %v", err)
+	}
+}
+
 func TestGetByIDReturnsInterviewQuestionsAndAnswers(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

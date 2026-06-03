@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrAudioFileRequired     = errors.New("audio file is required")
+	ErrAudioFileTooLarge     = errors.New("audio file is too large")
 	ErrUnsupportedAudioType  = errors.New("audio file must be audio/webm")
 	ErrSaveAnswerAudioFailed = errors.New("failed to save answer audio")
 )

@@ -166,6 +166,10 @@ Success response:
 Errors:
 
 ```json
+{"error":"interview not found"}
+```
+
+```json
 {"error":"interview is not ready to start"}
 ```
 

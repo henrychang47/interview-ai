@@ -28,7 +28,13 @@ func uploadAnswer(answerService AnswerService) http.HandlerFunc {
 		interviewID := chi.URLParam(r, "interviewID")
 		questionID := chi.URLParam(r, "questionID")
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxAnswerAudioBytes)
 		if err := r.ParseMultipartForm(maxAnswerAudioBytes); err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				writeError(w, http.StatusRequestEntityTooLarge, service.ErrAudioFileTooLarge.Error())
+				return
+			}
 			writeError(w, http.StatusBadRequest, service.ErrAudioFileRequired.Error())
 			return
 		}
