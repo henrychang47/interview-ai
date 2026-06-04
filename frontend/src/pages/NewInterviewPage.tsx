@@ -1,6 +1,7 @@
 import { FormEvent, MouseEvent, useEffect, useRef, useState } from 'react'
 
 import { createInterview } from '../api/interviews'
+import { AudioPlayer } from '../components/AudioPlayer'
 import { Button, Card, Icon, StatusBadge, StepProgress, TopBar } from '../components/ui'
 import type { CreateInterviewRequest } from '../types/interview'
 
@@ -399,14 +400,10 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
 
                     {microphonePreviewURL ? (
                       <div className="mt-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md">
-                        <p className="mb-sm text-label-md font-bold text-on-surface">
-                          測試錄音預覽
-                        </p>
-                        <audio
-                          aria-label="麥克風測試錄音預覽"
-                          controls
-                          className="w-full"
+                        <AudioPlayer
                           src={microphonePreviewURL}
+                          label="麥克風測試錄音預覽"
+                          title="測試錄音預覽"
                         />
                       </div>
                     ) : null}

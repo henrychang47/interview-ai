@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { getInterview } from '../api/interviews'
+import { AudioPlayer } from '../components/AudioPlayer'
 import { MarkdownText } from '../components/MarkdownText'
-import { Card, Icon, InfoDisclosure, PageShell, StatusBadge, TopBar } from '../components/ui'
+import { Button, Card, Icon, InfoDisclosure, PageShell, StatusBadge, TopBar } from '../components/ui'
 import type { Answer, InterviewDetail } from '../types/interview'
 
 type InterviewResultPageProps = {
@@ -15,6 +16,58 @@ function answerAudioURL(audioPath: string | null) {
   }
 
   return '/' + audioPath.replace(/^storage\/audio\//, 'audio/')
+}
+
+function formatDownloadDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+function buildInterviewReportMarkdown(
+  interview: InterviewDetail,
+  answersByQuestionID: Record<string, Answer>,
+) {
+  const sections = [
+    `# ${interview.job_title} 面試結果`,
+    ['## 職位資訊', '', interview.job_description].join('\n'),
+    ['## 個人資訊', '', interview.user_profile].join('\n'),
+  ]
+
+  interview.questions.forEach((question) => {
+    const answer = answersByQuestionID[question.id]
+    const transcript =
+      answer?.analysis_status === 'completed' && answer.transcript_text
+        ? answer.transcript_text
+        : '尚未完成分析'
+    const suggestions =
+      answer?.analysis_status === 'completed' && answer.improvement_suggestions
+        ? answer.improvement_suggestions
+        : '尚未完成分析'
+
+    sections.push(
+      [
+        `## Q${question.order}. ${question.text}`,
+        '',
+        `逐字稿：${transcript}`,
+        '',
+        `改進建議：${suggestions}`,
+      ].join('\n'),
+    )
+  })
+
+  return sections.join('\n\n')
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function InterviewResultPage({ interviewID }: InterviewResultPageProps) {
@@ -65,6 +118,19 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
       answer.analysis_status === 'pending' || answer.analysis_status === 'processing',
     )
   }, [interview?.answers])
+
+  const downloadDate = formatDownloadDate(new Date())
+
+  function handleDownloadReport() {
+    if (!interview) {
+      return
+    }
+
+    downloadTextFile(
+      `interview_report_${downloadDate}.md`,
+      buildInterviewReportMarkdown(interview, answersByQuestionID),
+    )
+  }
 
   useEffect(() => {
     if (!hasPendingAnalysis) {
@@ -123,7 +189,12 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
                   {interview.job_title}
                 </h2>
               </div>
-              <StatusBadge tone="primary">{interview.status}</StatusBadge>
+              <div className="flex flex-col items-start gap-sm md:items-end">
+                <StatusBadge tone="primary">{interview.status}</StatusBadge>
+                <Button type="button" tone="secondary" icon="download" onClick={handleDownloadReport}>
+                  下載報告
+                </Button>
+              </div>
             </div>
 
             <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-2">
@@ -164,18 +235,15 @@ export default function InterviewResultPage({ interviewID }: InterviewResultPage
                           {answer ? (
                             <>
                               {audioURL ? (
-                                <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md">
-                                  <p className="mb-sm flex items-center gap-xs text-label-md font-bold text-on-surface-variant">
-                                    <Icon name="play_arrow" className="text-[18px]" />
-                                    回答音檔
-                                  </p>
-                                  <audio
-                                    aria-label={`問題 ${question.order} 回答音檔`}
-                                    controls
-                                    src={audioURL}
-                                    className="w-full"
-                                  />
-                                </div>
+                                <AudioPlayer
+                                  src={audioURL}
+                                  label={`問題 ${question.order} 回答音檔`}
+                                  title="回答音檔"
+                                  download={{
+                                    filename: `q${question.order}_${downloadDate}.webm`,
+                                    label: `下載音檔 問題 ${question.order}`,
+                                  }}
+                                />
                               ) : (
                                 <div className="rounded-xl border border-error/30 bg-error-container/40 p-md text-body-sm text-on-error-container">
                                   回答音檔已過期

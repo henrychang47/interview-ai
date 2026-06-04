@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -191,6 +191,15 @@ function installObjectURLMock() {
   return { createObjectURL, revokeObjectURL }
 }
 
+function readBlobText(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(blob)
+  })
+}
+
 type MockAudioInstance = {
   src: string
   onended: (() => void) | null
@@ -354,6 +363,20 @@ describe('App', () => {
       'src',
       'blob:recorded-answer',
     )
+    expect(screen.getByLabelText('麥克風測試錄音預覽')).not.toHaveAttribute('controls')
+    const microphonePreviewPanel = screen.getByRole('group', { name: '麥克風測試錄音預覽控制' })
+    expect(
+      within(microphonePreviewPanel).getByRole('button', { name: '播放 麥克風測試錄音預覽' }),
+    ).toBeInTheDocument()
+    expect(within(microphonePreviewPanel).getByLabelText('麥克風測試錄音預覽播放進度')).toHaveValue('0')
+    expect(within(microphonePreviewPanel).getByText('00:00 / 00:00')).toBeInTheDocument()
+    const microphonePreviewTools = within(microphonePreviewPanel).getByRole('group', {
+      name: '麥克風測試錄音預覽右側工具',
+    })
+    expect(within(microphonePreviewTools).getByLabelText('麥克風測試錄音預覽音量')).toHaveValue('100')
+    expect(
+      within(microphonePreviewTools).getByRole('button', { name: '靜音 麥克風測試錄音預覽' }),
+    ).toBeInTheDocument()
     expect(await screen.findByText('麥克風已就緒')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '建立面試' }))
@@ -1117,9 +1140,27 @@ describe('App', () => {
   })
 
   it('loads the completed interview result page with playable answers', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-04T12:00:00+08:00'))
     mockPathname('/interviews/interview-123/result')
     const jobDescription = '需要熟悉 Go、PostgreSQL、REST API\n能設計可維護的服務'
     const userProfile = '有 Java 和 Go 學習經驗\n正在準備後端工程師面試'
+    const createObjectURL = vi.fn((_: Blob) => 'blob:interview-report')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    })
+    const clickedDownloads: HTMLAnchorElement[] = []
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function clickDownloadAnchor(this: HTMLAnchorElement) {
+        clickedDownloads.push(this)
+      })
     vi.stubGlobal(
       'fetch',
       mockFetchOnce({
@@ -1186,14 +1227,61 @@ describe('App', () => {
     expect(screen.getByText('AI 分析中')).toBeInTheDocument()
     expect(screen.getByText('我會先確認需求，再設計 resource 與錯誤格式。')).toBeInTheDocument()
     expect(screen.getByText('可以補充具體案例與取捨理由。')).toBeInTheDocument()
+    expect(screen.getByLabelText('問題 1 回答音檔')).not.toHaveAttribute('controls')
     expect(screen.getByLabelText('問題 1 回答音檔')).toHaveAttribute(
       'src',
       '/audio/interview-123/question-1.webm',
     )
+    expect(screen.getByLabelText('問題 2 回答音檔')).not.toHaveAttribute('controls')
     expect(screen.getByLabelText('問題 2 回答音檔')).toHaveAttribute(
       'src',
       '/audio/interview-123/question-2.webm',
     )
+    const firstAudioPanel = screen.getByRole('group', { name: '問題 1 回答音檔控制' })
+    expect(within(firstAudioPanel).getByRole('button', { name: '播放 問題 1 回答音檔' })).toBeInTheDocument()
+    expect(within(firstAudioPanel).getByLabelText('問題 1 回答音檔播放進度')).toHaveValue('0')
+    const firstAudioTools = within(firstAudioPanel).getByRole('group', {
+      name: '問題 1 回答音檔右側工具',
+    })
+    const firstVolumeSlider = within(firstAudioTools).getByLabelText('問題 1 回答音檔音量')
+    expect(firstVolumeSlider).toHaveValue('100')
+    fireEvent.change(firstVolumeSlider, { target: { value: '40' } })
+    expect(firstVolumeSlider).toHaveValue('40')
+    expect(within(firstAudioTools).getByRole('button', { name: '靜音 問題 1 回答音檔' })).toBeInTheDocument()
+    expect(within(firstAudioPanel).getByText('00:00 / 00:00')).toBeInTheDocument()
+    expect(within(firstAudioTools).getByRole('link', { name: '下載音檔 問題 1' })).toHaveAttribute(
+      'href',
+      '/audio/interview-123/question-1.webm',
+    )
+    expect(within(firstAudioTools).getByRole('link', { name: '下載音檔 問題 1' })).toHaveAttribute(
+      'download',
+      'q1_20260604.webm',
+    )
+    expect(screen.getByRole('link', { name: '下載音檔 問題 2' })).toHaveAttribute(
+      'download',
+      'q2_20260604.webm',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '下載報告' }))
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    const reportBlob = createObjectURL.mock.calls[0][0] as Blob
+    const reportText = await readBlobText(reportBlob)
+    expect(reportText).toContain('# 後端工程師 面試結果')
+    expect(reportText).toContain('## 職位資訊')
+    expect(reportText).toContain(jobDescription)
+    expect(reportText).toContain('## 個人資訊')
+    expect(reportText).toContain(userProfile)
+    expect(reportText).toContain('## Q1. 請介紹你過去與後端開發相關的經驗。')
+    expect(reportText).toContain('逐字稿：尚未完成分析')
+    expect(reportText).toContain('改進建議：尚未完成分析')
+    expect(reportText).toContain('我會先確認需求，再設計 resource 與錯誤格式。')
+    expect(reportText).toContain('可以補充具體案例與取捨理由。')
+    expect(clickedDownloads[0]).toHaveAttribute('download', 'interview_report_20260604.md')
+    expect(clickedDownloads[0]).toHaveAttribute('href', 'blob:interview-report')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:interview-report')
+    anchorClick.mockRestore()
+    vi.useRealTimers()
   })
 
   it('renders completed improvement suggestions as markdown with preserved line breaks', async () => {
@@ -1420,6 +1508,8 @@ describe('App', () => {
   })
 
   it('shows an expired-audio state when an answer has no audio path', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-04T12:00:00+08:00'))
     mockPathname('/interviews/interview-123/result')
     vi.stubGlobal(
       'fetch',
@@ -1451,10 +1541,12 @@ describe('App', () => {
 
     expect(await screen.findByText('第一題')).toBeInTheDocument()
     expect(screen.getByText('回答音檔已過期')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '下載音檔 問題 1' })).not.toBeInTheDocument()
     expect(screen.queryByText('尚未上傳回答')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('問題 1 回答音檔')).not.toBeInTheDocument()
     expect(screen.getByText('這是保留的逐字稿。')).toBeInTheDocument()
     expect(screen.getByText('這是保留的建議。')).toBeInTheDocument()
+    vi.useRealTimers()
   })
 
   it('shows an API error when loading a result page fails', async () => {
