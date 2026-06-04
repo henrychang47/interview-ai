@@ -67,6 +67,7 @@ services:
     mem_limit: 384m
     cpus: "0.40"
     environment:
+      DEPLOY_DOMAIN: ${DEPLOY_DOMAIN}
       VITE_API_PROXY_TARGET: http://backend:8080
     depends_on:
       - backend
