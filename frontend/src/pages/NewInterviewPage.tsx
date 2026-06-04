@@ -196,254 +196,253 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
     <>
       <TopBar maxWidth="max-w-readable" action={{ href: '/', label: '返回首頁', icon: 'arrow_back' }} />
       <main className="min-h-screen bg-surface text-on-surface">
-      <section className="mx-auto w-full max-w-readable px-margin-mobile py-lg md:px-margin-desktop md:py-xl">
-        <div className="mb-lg">
-          <p className="text-label-md font-bold uppercase text-primary">Interview Setup</p>
-          <h1 className="mt-sm font-headline text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
-            建立新面試
-          </h1>
-          <p className="mt-sm text-body-md text-on-surface-variant">
-            請提供職位資訊，AI 將為您量身打造面試情境。
-          </p>
-        </div>
+        <section className="mx-auto w-full max-w-readable px-margin-mobile py-lg md:px-margin-desktop md:py-xl">
+          <div className="mb-lg">
+            <p className="text-label-md font-bold uppercase text-primary">Interview Setup</p>
+            <h1 className="mt-sm font-headline text-headline-lg-mobile font-bold text-on-surface md:text-headline-lg">
+              建立新面試
+            </h1>
+            <p className="mt-sm text-body-md text-on-surface-variant">
+              請提供職位資訊，AI 將為您量身打造面試情境。
+            </p>
+          </div>
 
-        <div className="relative z-0 mb-xl">
-          <StepProgress currentStep={currentStep} steps={['職位資訊', '設定與測試']} />
-        </div>
+          <div className="relative z-0 mb-xl">
+            <StepProgress currentStep={currentStep} steps={['職位資訊', '設定與測試']} />
+          </div>
 
-        <form onSubmit={handleSubmit}>
-          <Card className="p-lg md:p-xl">
-            {error ? (
-              <div className="mb-lg flex items-start gap-sm rounded-lg border border-error/20 bg-error-container p-md text-on-error-container">
-                <Icon name="warning" className="mt-xs" />
-                <div>
-                  <p className="text-label-md font-bold">建立失敗</p>
-                  <p className="mt-xs text-body-sm">{error}</p>
-                </div>
-              </div>
-            ) : null}
-
-            {step === 'profile' ? (
-              <>
-                <div className="space-y-lg">
-                  <label className="block">
-                    <span className="mb-sm block text-label-md font-semibold text-on-surface">
-                      職位名稱
-                    </span>
-                    <input
-                      className="focus-calm w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
-                      placeholder="例如：後端工程師"
-                      required
-                      maxLength={JOB_TITLE_MAX_LENGTH}
-                      value={form.job_title}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          job_title: event.target.value.slice(0, JOB_TITLE_MAX_LENGTH),
-                        }))
-                      }
-                    />
-                  </label>
-
-                  <div className="block">
-                    <label
-                      htmlFor="job_description"
-                      className="mb-sm block text-label-md font-semibold text-on-surface"
-                    >
-                      職位要求及說明
-                    </label>
-                    <textarea
-                      id="job_description"
-                      className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
-                      placeholder="貼上職缺描述或條列主要技能需求..."
-                      required
-                      maxLength={LONG_TEXT_MAX_LENGTH}
-                      value={form.job_description}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          job_description: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
-                        }))
-                      }
-                    />
-                    <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
-                      {form.job_description.length}/{LONG_TEXT_MAX_LENGTH}
-                    </span>
-                  </div>
-
-                  <div className="block">
-                    <label
-                      htmlFor="user_profile"
-                      className="mb-sm block text-label-md font-semibold text-on-surface"
-                    >
-                      個人資訊
-                    </label>
-                    <textarea
-                      id="user_profile"
-                      className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
-                      placeholder="簡述您的相關經驗或貼上履歷摘要..."
-                      required
-                      maxLength={LONG_TEXT_MAX_LENGTH}
-                      value={form.user_profile}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          user_profile: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
-                        }))
-                      }
-                    />
-                    <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
-                      {form.user_profile.length}/{LONG_TEXT_MAX_LENGTH}
-                    </span>
+          <form onSubmit={handleSubmit}>
+            <Card className="p-lg md:p-xl">
+              {error ? (
+                <div className="mb-lg flex items-start gap-sm rounded-lg border border-error/20 bg-error-container p-md text-on-error-container">
+                  <Icon name="warning" className="mt-xs" />
+                  <div>
+                    <p className="text-label-md font-bold">建立失敗</p>
+                    <p className="mt-xs text-body-sm">{error}</p>
                   </div>
                 </div>
+              ) : null}
 
-                <div className="mt-xl flex justify-end">
-                  <Button type="submit" disabled={!isProfileComplete}>
-                    下一步
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-lg">
-                  <div className="grid grid-cols-1 gap-lg border-b border-outline-variant pb-lg md:grid-cols-2">
+              {step === 'profile' ? (
+                <>
+                  <div className="space-y-lg">
                     <label className="block">
                       <span className="mb-sm block text-label-md font-semibold text-on-surface">
-                        題目數量
+                        職位名稱
                       </span>
                       <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        className="focus-calm w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface"
-                        value={form.question_count}
+                        className="focus-calm w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
+                        placeholder="例如：後端工程師"
+                        required
+                        maxLength={JOB_TITLE_MAX_LENGTH}
+                        value={form.job_title}
                         onChange={(event) =>
                           setForm((current) => ({
                             ...current,
-                            question_count: Number(event.target.value),
+                            job_title: event.target.value.slice(0, JOB_TITLE_MAX_LENGTH),
                           }))
                         }
                       />
                     </label>
 
-                    <fieldset>
-                      <legend className="mb-sm text-label-md font-semibold text-on-surface">
-                        題目語言
-                      </legend>
-                      <div className="flex flex-wrap gap-md">
-                        {[
-                          ['zh-TW', '繁體中文'],
-                          ['en-US', 'English'],
-                        ].map(([value, label]) => {
-                          const checked = form.question_language === value
-                          return (
-                            <label
-                              key={value}
-                              className={`flex flex-1 cursor-pointer items-center justify-center gap-sm rounded-lg px-4 py-2.5 transition-all ${
-                                checked
-                                  ? 'border-2 border-primary bg-primary/5 text-primary'
-                                  : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="question_language"
-                                value={value}
-                                checked={checked}
-                                onChange={(event) =>
-                                  setForm((current) => ({
-                                    ...current,
-                                    question_language: event.target.value,
-                                  }))
-                                }
-                              />
-                              <span className="text-body-md font-semibold">{label}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </fieldset>
-                  </div>
-
-                  <div>
-                    <h2 className="mb-md text-label-md font-semibold text-on-surface">裝置測試</h2>
-                    <div className="flex flex-col items-center justify-between gap-md rounded-lg border border-outline-variant bg-surface-container-low p-md md:flex-row">
-                      <div className="flex w-full items-center gap-md md:w-auto">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-primary">
-                          <Icon name="mic" />
-                        </div>
-                        <div>
-                          <p className="text-body-md font-bold">麥克風測試</p>
-                          <p className="text-body-sm text-on-surface-variant">
-                            錄製一小段語音並播放確認收音效果
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        tone={isRecordingMicrophoneTest ? 'danger' : 'secondary'}
-                        icon={isRecordingMicrophoneTest ? 'stop_circle' : 'settings_voice'}
-                        disabled={isTestingMicrophone && !isRecordingMicrophoneTest}
-                        onClick={isRecordingMicrophoneTest ? stopMicrophoneTest : testMicrophone}
-                        className="w-full md:w-auto"
+                    <div className="block">
+                      <label
+                        htmlFor="job_description"
+                        className="mb-sm block text-label-md font-semibold text-on-surface"
                       >
-                        {isRecordingMicrophoneTest
-                          ? '停止錄音'
-                          : isTestingMicrophone
-                            ? '準備錄音...'
-                            : microphonePreviewURL
-                              ? '重新測試'
-                              : '測試麥克風'}
-                      </Button>
+                        職位要求及說明
+                      </label>
+                      <textarea
+                        id="job_description"
+                        className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
+                        placeholder="貼上職缺描述或條列主要技能需求..."
+                        required
+                        maxLength={LONG_TEXT_MAX_LENGTH}
+                        value={form.job_description}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            job_description: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
+                          }))
+                        }
+                      />
+                      <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
+                        {form.job_description.length}/{LONG_TEXT_MAX_LENGTH}
+                      </span>
                     </div>
 
-                    {microphonePreviewURL ? (
-                      <div className="mt-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md">
-                        <AudioPlayer
-                          src={microphonePreviewURL}
-                          label="麥克風測試錄音預覽"
-                          title="測試錄音預覽"
-                        />
-                      </div>
-                    ) : null}
-
-                    <div className="mt-md flex flex-wrap gap-sm">
-                      {isRecordingMicrophoneTest ? (
-                        <StatusBadge tone="primary">
-                          <Icon name="graphic_eq" className="text-[18px]" />
-                          錄音中，請說一小段話
-                        </StatusBadge>
-                      ) : null}
-                      {microphoneReady ? (
-                        <StatusBadge tone="success">
-                          <Icon name="check_circle" className="text-[18px]" />
-                          麥克風已就緒
-                        </StatusBadge>
-                      ) : null}
-                      {microphoneError ? (
-                        <StatusBadge tone="danger">
-                          <Icon name="error" className="text-[18px]" />
-                          {microphoneError}
-                        </StatusBadge>
-                      ) : null}
+                    <div className="block">
+                      <label
+                        htmlFor="user_profile"
+                        className="mb-sm block text-label-md font-semibold text-on-surface"
+                      >
+                        個人資訊
+                      </label>
+                      <textarea
+                        id="user_profile"
+                        className="focus-calm min-h-32 w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface placeholder:text-on-surface-variant"
+                        placeholder="簡述您的相關經驗或貼上履歷摘要..."
+                        required
+                        maxLength={LONG_TEXT_MAX_LENGTH}
+                        value={form.user_profile}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            user_profile: event.target.value.slice(0, LONG_TEXT_MAX_LENGTH),
+                          }))
+                        }
+                      />
+                      <span className="mt-xs block text-right text-label-sm text-on-surface-variant">
+                        {form.user_profile.length}/{LONG_TEXT_MAX_LENGTH}
+                      </span>
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-xl flex flex-wrap items-center justify-between gap-md border-t border-outline-variant pt-md">
-                  <Button type="button" tone="ghost" icon="arrow_back" onClick={handleBackToProfile}>
-                    上一步
-                  </Button>
-                  <Button type="submit" disabled={!microphoneReady || isSubmitting}>
-                    {isSubmitting ? '建立中...' : '建立面試'}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Card>
-        </form>
-      </section>
+                  <div className="mt-xl flex justify-end">
+                    <Button type="submit" disabled={!isProfileComplete}>
+                      下一步
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-lg">
+                    <div className="grid grid-cols-1 gap-lg border-b border-outline-variant pb-lg md:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-sm block text-label-md font-semibold text-on-surface">
+                          題目數量
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={5}
+                          className="focus-calm w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-body-md text-on-surface"
+                          value={form.question_count}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              question_count: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <fieldset>
+                        <legend className="mb-sm text-label-md font-semibold text-on-surface">
+                          題目語言
+                        </legend>
+                        <div className="flex flex-wrap gap-md">
+                          {[
+                            ['zh-TW', '繁體中文'],
+                            ['en-US', 'English'],
+                          ].map(([value, label]) => {
+                            const checked = form.question_language === value
+                            return (
+                              <label
+                                key={value}
+                                className={`flex flex-1 cursor-pointer items-center justify-center gap-sm rounded-lg px-4 py-2.5 transition-all ${checked
+                                    ? 'border-2 border-primary bg-primary/5 text-primary'
+                                    : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
+                                  }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="question_language"
+                                  value={value}
+                                  checked={checked}
+                                  onChange={(event) =>
+                                    setForm((current) => ({
+                                      ...current,
+                                      question_language: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <span className="text-body-md font-semibold">{label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </fieldset>
+                    </div>
+
+                    <div>
+                      <h2 className="mb-md text-label-md font-semibold text-on-surface">裝置測試</h2>
+                      <div className="flex flex-col items-center justify-between gap-md rounded-lg border border-outline-variant bg-surface-container-low p-md md:flex-row">
+                        <div className="flex w-full items-center gap-md md:w-auto">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-primary">
+                            <Icon name="mic" />
+                          </div>
+                          <div>
+                            <p className="text-body-md font-bold">麥克風測試</p>
+                            <p className="text-body-sm text-on-surface-variant">
+                              錄製一小段語音並播放確認收音效果
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          tone={isRecordingMicrophoneTest ? 'danger' : 'secondary'}
+                          icon={isRecordingMicrophoneTest ? 'stop_circle' : 'settings_voice'}
+                          disabled={isTestingMicrophone && !isRecordingMicrophoneTest}
+                          onClick={isRecordingMicrophoneTest ? stopMicrophoneTest : testMicrophone}
+                          className="w-full md:w-auto"
+                        >
+                          {isRecordingMicrophoneTest
+                            ? '停止錄音'
+                            : isTestingMicrophone
+                              ? '準備錄音...'
+                              : microphonePreviewURL
+                                ? '重新測試'
+                                : '測試麥克風'}
+                        </Button>
+                      </div>
+
+                      {microphonePreviewURL ? (
+                        <div className="mt-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md">
+                          <AudioPlayer
+                            src={microphonePreviewURL}
+                            label="麥克風測試錄音預覽"
+                            title="測試錄音預覽"
+                          />
+                        </div>
+                      ) : null}
+
+                      <div className="mt-md flex flex-wrap gap-sm">
+                        {isRecordingMicrophoneTest ? (
+                          <StatusBadge tone="primary">
+                            <Icon name="graphic_eq" className="text-[18px]" />
+                            錄音中，請說一小段話
+                          </StatusBadge>
+                        ) : null}
+                        {microphoneReady ? (
+                          <StatusBadge tone="success">
+                            <Icon name="check_circle" className="text-[18px]" />
+                            麥克風已就緒
+                          </StatusBadge>
+                        ) : null}
+                        {microphoneError ? (
+                          <StatusBadge tone="danger">
+                            <Icon name="error" className="text-[18px]" />
+                            {microphoneError}
+                          </StatusBadge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-xl flex flex-wrap items-center justify-between gap-md border-t border-outline-variant pt-md">
+                    <Button type="button" tone="ghost" icon="arrow_back" onClick={handleBackToProfile}>
+                      上一步
+                    </Button>
+                    <Button type="submit" disabled={!microphoneReady || isSubmitting}>
+                      {isSubmitting ? '建立中...' : '建立面試'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Card>
+          </form>
+        </section>
       </main>
     </>
   )
