@@ -13,6 +13,8 @@ type InterviewDetailPageProps = {
   interviewID: string
 }
 
+const UPLOAD_PRIVACY_NOTICE = '所有資訊與語音都會上傳，請勿透露任何重要資訊。'
+
 export default function InterviewDetailPage({ interviewID }: InterviewDetailPageProps) {
   const [interview, setInterview] = useState<InterviewDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -187,6 +189,10 @@ export default function InterviewDetailPage({ interviewID }: InterviewDetailPage
                   <p className="mt-sm text-body-sm text-on-surface-variant">
                     準備好後即可開始。題目會在面試過程中逐題朗讀。
                   </p>
+                  <div className="mt-md flex items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low p-md text-body-sm text-on-surface-variant">
+                    <Icon name="info" className="mt-[2px] text-[18px]" />
+                    <p>{UPLOAD_PRIVACY_NOTICE}</p>
+                  </div>
                 </div>
                 <Button
                   type="button"

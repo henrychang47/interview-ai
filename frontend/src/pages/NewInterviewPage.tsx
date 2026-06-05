@@ -19,6 +19,7 @@ const initialForm: CreateInterviewRequest = {
 
 const JOB_TITLE_MAX_LENGTH = 50
 const LONG_TEXT_MAX_LENGTH = 4000
+const UPLOAD_PRIVACY_NOTICE = '所有資訊與語音都會上傳，請勿透露任何重要資訊。'
 
 type SetupStep = 'profile' | 'settings'
 
@@ -226,6 +227,11 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
               {step === 'profile' ? (
                 <>
                   <div className="space-y-lg">
+                    <div className="flex items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low p-md text-body-sm text-on-surface-variant">
+                      <Icon name="info" className="mt-[2px] text-[18px]" />
+                      <p>{UPLOAD_PRIVACY_NOTICE}</p>
+                    </div>
+
                     <label className="block">
                       <span className="mb-sm block text-label-md font-semibold text-on-surface">
                         職位名稱
@@ -341,8 +347,8 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
                               <label
                                 key={value}
                                 className={`flex flex-1 cursor-pointer items-center justify-center gap-sm rounded-lg px-4 py-2.5 transition-all ${checked
-                                    ? 'border-2 border-primary bg-primary/5 text-primary'
-                                    : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
+                                  ? 'border-2 border-primary bg-primary/5 text-primary'
+                                  : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
                                   }`}
                               >
                                 <input
@@ -367,7 +373,7 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
 
                     <div>
                       <h2 className="mb-md text-label-md font-semibold text-on-surface">裝置測試</h2>
-                      <div className="flex flex-col items-center justify-between gap-md rounded-lg border border-outline-variant bg-surface-container-low p-md md:flex-row">
+                      <div className="flex flex-col items-center justify-between gap-md rounded-lg border border-outline-variant bg-surface-container-low p-md mb-md md:flex-row">
                         <div className="flex w-full items-center gap-md md:w-auto">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-primary">
                             <Icon name="mic" />
@@ -398,13 +404,11 @@ export default function NewInterviewPage({ onCreated }: NewInterviewPageProps) {
                       </div>
 
                       {microphonePreviewURL ? (
-                        <div className="mt-md rounded-lg border border-outline-variant bg-surface-container-lowest p-md">
-                          <AudioPlayer
-                            src={microphonePreviewURL}
-                            label="麥克風測試錄音預覽"
-                            title="測試錄音預覽"
-                          />
-                        </div>
+                        <AudioPlayer
+                          src={microphonePreviewURL}
+                          label="麥克風測試錄音預覽"
+                          title="測試錄音預覽"
+                        />
                       ) : null}
 
                       <div className="mt-md flex flex-wrap gap-sm">

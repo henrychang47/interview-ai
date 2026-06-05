@@ -270,6 +270,7 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'AI模擬面試' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: '返回首頁' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('heading', { name: '建立新面試' })).toBeInTheDocument()
+    expect(screen.getByText('所有資訊與語音都會上傳，請勿透露任何重要資訊。')).toBeInTheDocument()
     expect(screen.getByLabelText('職位名稱')).toBeInTheDocument()
     expect(screen.getByLabelText('職位要求及說明')).toBeInTheDocument()
     expect(screen.getByLabelText('個人資訊')).toBeInTheDocument()
@@ -346,6 +347,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
 
     expect(await screen.findByLabelText('題目數量')).toHaveValue(3)
+    expect(screen.getByText('所有資訊與語音都會上傳，請勿透露任何重要資訊。')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('題目數量'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
     expect(screen.getByRole('button', { name: '建立面試' })).toBeDisabled()
@@ -600,6 +602,7 @@ describe('App', () => {
     expect(findElementByExactText(userProfile)).toHaveClass('whitespace-pre-wrap', 'break-words')
     fireEvent.click(screen.getByRole('button', { name: '關閉' }))
     expect(await screen.findByRole('button', { name: '開始模擬面試' })).toBeEnabled()
+    expect(screen.getByText('所有資訊與語音都會上傳，請勿透露任何重要資訊。')).toBeInTheDocument()
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith('/api/interviews/interview-123/questions/tts', {
