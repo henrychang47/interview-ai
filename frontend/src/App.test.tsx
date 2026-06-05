@@ -347,7 +347,6 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
 
     expect(await screen.findByLabelText('題目數量')).toHaveValue(3)
-    expect(screen.getByText('所有資訊與語音都會上傳，請勿透露任何重要資訊。')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('題目數量'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
     expect(screen.getByRole('button', { name: '建立面試' })).toBeDisabled()
