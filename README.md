@@ -21,6 +21,10 @@ docker compose up --build
 - 前端：`http://localhost:5173`
 - 後端：`http://localhost:8080`
 
+## 正式部署
+
+正式部署會在 Caddy image 的 build stage 中執行 Vite production build，並由 Caddy 直接服務 `dist` 靜態檔案；Caddy 同時處理 HTTPS、gzip、SPA fallback 與 `/api/*` backend reverse proxy。
+
 ## 資料庫遷移
 
 ```powershell

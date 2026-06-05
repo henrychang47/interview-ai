@@ -63,21 +63,10 @@ services:
       postgres:
         condition: service_healthy
 
-  frontend:
-    build:
-      context: ./frontend
-    container_name: frontend
-    restart: unless-stopped
-    mem_limit: 384m
-    cpus: "0.40"
-    environment:
-      DEPLOY_DOMAIN: ${DEPLOY_DOMAIN}
-      VITE_API_PROXY_TARGET: http://backend:8080
-    depends_on:
-      - backend
-
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     container_name: caddy
     restart: unless-stopped
     mem_limit: 128m
@@ -88,11 +77,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - frontend
       - backend
 
 volumes:
