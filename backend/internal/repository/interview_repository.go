@@ -22,13 +22,9 @@ func NewInterviewRepository(pool *pgxpool.Pool) *InterviewRepository {
 	return &InterviewRepository{pool: pool}
 }
 
-func (r *InterviewRepository) CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
-	return createPending(ctx, r.pool, input)
-}
-
 func (r *InterviewRepository) CreatePendingWithCreationLimit(ctx context.Context, input model.CreateInterviewRequest, clientIPHash string, limit int) (model.CreateInterviewResponse, error) {
 	if clientIPHash == "" {
-		return r.CreatePending(ctx, input)
+		return createPending(ctx, r.pool, input)
 	}
 	if limit <= 0 {
 		limit = 5

@@ -82,7 +82,7 @@ func TestCreatePendingPersistsGeneratingInterviewWithLanguage(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	response, err := repository.CreatePending(ctx, model.CreateInterviewRequest{
+	response, err := createPendingInterview(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:         "Backend Engineer",
 		JobDescription:   "Build APIs",
 		UserProfile:      "Go experience",
@@ -90,7 +90,7 @@ func TestCreatePendingPersistsGeneratingInterviewWithLanguage(t *testing.T) {
 		QuestionLanguage: model.QuestionLanguageEnUS,
 	})
 	if err != nil {
-		t.Fatalf("CreatePending returned error: %v", err)
+		t.Fatalf("createPendingInterview returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", response.ID)
@@ -402,7 +402,7 @@ func TestSaveGeneratedQuestionsMarksInterviewReady(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	created, err := repository.CreatePending(ctx, model.CreateInterviewRequest{
+	created, err := createPendingInterview(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:         "後端工程師",
 		JobDescription:   "需要熟悉 Go",
 		UserProfile:      "有 Go 經驗",
@@ -410,7 +410,7 @@ func TestSaveGeneratedQuestionsMarksInterviewReady(t *testing.T) {
 		QuestionLanguage: model.QuestionLanguageZhTW,
 	})
 	if err != nil {
-		t.Fatalf("CreatePending returned error: %v", err)
+		t.Fatalf("createPendingInterview returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -452,7 +452,7 @@ func TestMarkQuestionGenerationFailedMarksInterviewFailed(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	created, err := repository.CreatePending(ctx, model.CreateInterviewRequest{
+	created, err := createPendingInterview(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:         "後端工程師",
 		JobDescription:   "需要熟悉 Go",
 		UserProfile:      "有 Go 經驗",
@@ -460,7 +460,7 @@ func TestMarkQuestionGenerationFailedMarksInterviewFailed(t *testing.T) {
 		QuestionLanguage: model.QuestionLanguageZhTW,
 	})
 	if err != nil {
-		t.Fatalf("CreatePending returned error: %v", err)
+		t.Fatalf("createPendingInterview returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -493,7 +493,7 @@ func TestStartMovesReadyInterviewToInProgress(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	created, err := repository.CreatePending(ctx, model.CreateInterviewRequest{
+	created, err := createPendingInterview(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:         "後端工程師",
 		JobDescription:   "需要熟悉 Go",
 		UserProfile:      "有 Go 經驗",
@@ -501,7 +501,7 @@ func TestStartMovesReadyInterviewToInProgress(t *testing.T) {
 		QuestionLanguage: model.QuestionLanguageZhTW,
 	})
 	if err != nil {
-		t.Fatalf("CreatePending returned error: %v", err)
+		t.Fatalf("createPendingInterview returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -534,7 +534,7 @@ func TestStartRejectsInterviewThatIsNotReady(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	created, err := repository.CreatePending(ctx, model.CreateInterviewRequest{
+	created, err := createPendingInterview(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:         "後端工程師",
 		JobDescription:   "需要熟悉 Go",
 		UserProfile:      "有 Go 經驗",
@@ -542,7 +542,7 @@ func TestStartRejectsInterviewThatIsNotReady(t *testing.T) {
 		QuestionLanguage: model.QuestionLanguageZhTW,
 	})
 	if err != nil {
-		t.Fatalf("CreatePending returned error: %v", err)
+		t.Fatalf("createPendingInterview returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)

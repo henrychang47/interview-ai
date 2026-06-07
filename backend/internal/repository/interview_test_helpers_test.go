@@ -17,7 +17,7 @@ func createInterviewWithQuestions(
 		input.QuestionLanguage = model.QuestionLanguageZhTW
 	}
 
-	created, err := repository.CreatePending(ctx, input)
+	created, err := createPendingInterview(ctx, repository, input)
 	if err != nil {
 		return model.CreateInterviewResponse{}, err
 	}
@@ -29,4 +29,12 @@ func createInterviewWithQuestions(
 		ID:     created.ID,
 		Status: model.InterviewStatusQuestionsReady,
 	}, nil
+}
+
+func createPendingInterview(
+	ctx context.Context,
+	repository *InterviewRepository,
+	input model.CreateInterviewRequest,
+) (model.CreateInterviewResponse, error) {
+	return createPending(ctx, repository.pool, input)
 }
