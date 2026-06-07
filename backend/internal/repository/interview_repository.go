@@ -22,27 +22,6 @@ func NewInterviewRepository(pool *pgxpool.Pool) *InterviewRepository {
 	return &InterviewRepository{pool: pool}
 }
 
-func (r *InterviewRepository) CreateWithQuestions(
-	ctx context.Context,
-	input model.CreateInterviewRequest,
-	questions []llm.GeneratedQuestion,
-) (model.CreateInterviewResponse, error) {
-	if input.QuestionLanguage == "" {
-		input.QuestionLanguage = model.QuestionLanguageZhTW
-	}
-	created, err := r.CreatePending(ctx, input)
-	if err != nil {
-		return model.CreateInterviewResponse{}, err
-	}
-	if err := r.SaveGeneratedQuestions(ctx, created.ID, questions); err != nil {
-		return model.CreateInterviewResponse{}, err
-	}
-	return model.CreateInterviewResponse{
-		ID:     created.ID,
-		Status: model.InterviewStatusQuestionsReady,
-	}, nil
-}
-
 func (r *InterviewRepository) CreatePending(ctx context.Context, input model.CreateInterviewRequest) (model.CreateInterviewResponse, error) {
 	return createPending(ctx, r.pool, input)
 }

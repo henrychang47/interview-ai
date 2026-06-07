@@ -31,14 +31,14 @@ func TestUpsertAnswerCreatesAndUpdatesAnswer(t *testing.T) {
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go、PostgreSQL、REST API",
 		UserProfile:    "有 Go 學習經驗",
 		QuestionCount:  1,
 	}, []llm.GeneratedQuestion{{Order: 1, Text: "問題一"}})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -122,7 +122,7 @@ func TestListExpiredAnswerAudioAndClearAnswerAudioPath(t *testing.T) {
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
@@ -133,7 +133,7 @@ func TestListExpiredAnswerAudioAndClearAnswerAudioPath(t *testing.T) {
 		{Order: 3, Text: "第三題"},
 	})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -267,7 +267,7 @@ func TestUpsertAnswerRejectsQuestionOutsideInterview(t *testing.T) {
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	first, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	first, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
@@ -276,7 +276,7 @@ func TestUpsertAnswerRejectsQuestionOutsideInterview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create first interview: %v", err)
 	}
-	second, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	second, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "前端工程師",
 		JobDescription: "需要熟悉 React",
 		UserProfile:    "有 React 學習經驗",
@@ -323,14 +323,14 @@ func TestGetAnswerAnalysisContextReturnsInterviewAndQuestionContext(t *testing.T
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go、PostgreSQL、REST API",
 		UserProfile:    "有 Java 和 Go 學習經驗",
 		QuestionCount:  1,
 	}, []llm.GeneratedQuestion{{Order: 1, Text: "請介紹你做過的 Go API 專案。"}})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -381,7 +381,7 @@ func TestGetAnswerAnalysisContextRejectsQuestionOutsideInterview(t *testing.T) {
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	first, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	first, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
@@ -390,7 +390,7 @@ func TestGetAnswerAnalysisContextRejectsQuestionOutsideInterview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create first interview: %v", err)
 	}
-	second, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	second, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "前端工程師",
 		JobDescription: "需要熟悉 React",
 		UserProfile:    "有 React 學習經驗",
@@ -437,7 +437,7 @@ func TestCompleteInterviewIfAllQuestionsAnsweredKeepsInterviewOpenBeforeFinalAns
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
@@ -447,7 +447,7 @@ func TestCompleteInterviewIfAllQuestionsAnsweredKeepsInterviewOpenBeforeFinalAns
 		{Order: 2, Text: "第二題"},
 	})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
@@ -499,7 +499,7 @@ func TestCompleteInterviewIfAllQuestionsAnsweredMarksInterviewCompleted(t *testi
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
@@ -509,7 +509,7 @@ func TestCompleteInterviewIfAllQuestionsAnsweredMarksInterviewCompleted(t *testi
 		{Order: 2, Text: "第二題"},
 	})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)

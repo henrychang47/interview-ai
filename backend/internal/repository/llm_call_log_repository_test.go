@@ -27,14 +27,14 @@ func TestCreateLLMCallLogInsertsNullableFields(t *testing.T) {
 	})
 
 	interviewRepository := NewInterviewRepository(pool)
-	created, err := interviewRepository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, interviewRepository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go",
 		UserProfile:    "有 Go 學習經驗",
 		QuestionCount:  1,
 	}, []llm.GeneratedQuestion{{Order: 1, Text: "問題一"}})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)

@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestCreateWithQuestionsPersistsInterviewAndQuestions(t *testing.T) {
+func TestCreateInterviewWithQuestionsPersistsInterviewAndQuestions(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("DATABASE_URL is not set")
@@ -27,7 +27,7 @@ func TestCreateWithQuestionsPersistsInterviewAndQuestions(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	response, err := repository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	response, err := createInterviewWithQuestions(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go、PostgreSQL、REST API",
 		UserProfile:    "有 Java 和 Go 學習經驗",
@@ -38,7 +38,7 @@ func TestCreateWithQuestionsPersistsInterviewAndQuestions(t *testing.T) {
 		{Order: 3, Text: "問題三"},
 	})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", response.ID)
@@ -589,7 +589,7 @@ func TestGetByIDReturnsInterviewQuestionsAndAnswers(t *testing.T) {
 	defer pool.Close()
 
 	repository := NewInterviewRepository(pool)
-	created, err := repository.CreateWithQuestions(ctx, model.CreateInterviewRequest{
+	created, err := createInterviewWithQuestions(ctx, repository, model.CreateInterviewRequest{
 		JobTitle:       "後端工程師",
 		JobDescription: "需要熟悉 Go、PostgreSQL、REST API",
 		UserProfile:    "有 Java 和 Go 學習經驗",
@@ -599,7 +599,7 @@ func TestGetByIDReturnsInterviewQuestionsAndAnswers(t *testing.T) {
 		{Order: 2, Text: "問題二"},
 	})
 	if err != nil {
-		t.Fatalf("CreateWithQuestions returned error: %v", err)
+		t.Fatalf("createInterviewWithQuestions returned error: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM interviews WHERE id = $1", created.ID)
