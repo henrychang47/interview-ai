@@ -41,31 +41,27 @@ type InterviewService struct {
 	creationLimitPer24H int
 }
 
+type InterviewServiceConfig struct {
+	CreationLimitPer24H int
+	Runner              asyncRunner
+}
+
 func defaultAsyncRunner(task func()) {
 	go task()
 }
 
-func NewInterviewService(generator llm.QuestionGenerator, repository InterviewRepository) *InterviewService {
-	return NewInterviewServiceWithCreationLimit(generator, repository, 5)
-}
-
-func NewInterviewServiceWithRunner(generator llm.QuestionGenerator, repository InterviewRepository, runner asyncRunner) *InterviewService {
-	return NewInterviewServiceWithCreationLimitAndRunner(generator, repository, 5, runner)
-}
-
-func NewInterviewServiceWithCreationLimit(generator llm.QuestionGenerator, repository InterviewRepository, creationLimitPer24H int) *InterviewService {
-	return NewInterviewServiceWithCreationLimitAndRunner(generator, repository, creationLimitPer24H, defaultAsyncRunner)
-}
-
-func NewInterviewServiceWithCreationLimitAndRunner(generator llm.QuestionGenerator, repository InterviewRepository, creationLimitPer24H int, runner asyncRunner) *InterviewService {
-	if creationLimitPer24H <= 0 {
-		creationLimitPer24H = 5
+func NewInterviewService(generator llm.QuestionGenerator, repository InterviewRepository, config InterviewServiceConfig) *InterviewService {
+	if config.CreationLimitPer24H <= 0 {
+		config.CreationLimitPer24H = 5
+	}
+	if config.Runner == nil {
+		config.Runner = defaultAsyncRunner
 	}
 	return &InterviewService{
 		generator:           generator,
 		repository:          repository,
-		runner:              runner,
-		creationLimitPer24H: creationLimitPer24H,
+		runner:              config.Runner,
+		creationLimitPer24H: config.CreationLimitPer24H,
 	}
 }
 

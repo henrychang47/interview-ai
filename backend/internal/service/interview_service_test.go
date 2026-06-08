@@ -13,7 +13,7 @@ import (
 func TestCreateInterviewCreatesGeneratingInterviewAndStartsQuestionGeneration(t *testing.T) {
 	generator := &stubQuestionGenerator{}
 	repository := &stubInterviewRepository{}
-	service := NewInterviewServiceWithRunner(generator, repository, func(task func()) { task() })
+	service := NewInterviewService(generator, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	response, err := service.CreateInterview(context.Background(), model.CreateInterviewRequest{
 		JobTitle:         " 後端工程師 ",
@@ -58,7 +58,7 @@ func TestCreateInterviewCreatesGeneratingInterviewAndStartsQuestionGeneration(t 
 func TestCreateInterviewDefaultsQuestionLanguageToZhTW(t *testing.T) {
 	generator := &stubQuestionGenerator{}
 	repository := &stubInterviewRepository{}
-	service := NewInterviewServiceWithRunner(generator, repository, func(task func()) { task() })
+	service := NewInterviewService(generator, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = ""
@@ -73,7 +73,7 @@ func TestCreateInterviewDefaultsQuestionLanguageToZhTW(t *testing.T) {
 }
 
 func TestCreateInterviewRejectsUnsupportedQuestionLanguage(t *testing.T) {
-	service := NewInterviewServiceWithRunner(&stubQuestionGenerator{}, &stubInterviewRepository{}, func(task func()) { task() })
+	service := NewInterviewService(&stubQuestionGenerator{}, &stubInterviewRepository{}, InterviewServiceConfig{Runner: runImmediately})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = "ja-JP"
@@ -87,7 +87,7 @@ func TestCreateInterviewRejectsUnsupportedQuestionLanguage(t *testing.T) {
 func TestCreateInterviewMarksQuestionGenerationFailed(t *testing.T) {
 	generator := &stubQuestionGenerator{err: errors.New("generator failed")}
 	repository := &stubInterviewRepository{}
-	service := NewInterviewServiceWithRunner(generator, repository, func(task func()) { task() })
+	service := NewInterviewService(generator, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.QuestionLanguage = model.QuestionLanguageEnUS
@@ -102,7 +102,7 @@ func TestCreateInterviewMarksQuestionGenerationFailed(t *testing.T) {
 }
 
 func TestCreateInterviewRequiresJobTitle(t *testing.T) {
-	service := NewInterviewService(&stubQuestionGenerator{}, &stubInterviewRepository{})
+	service := NewInterviewService(&stubQuestionGenerator{}, &stubInterviewRepository{}, InterviewServiceConfig{})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.JobTitle = " "
@@ -115,7 +115,7 @@ func TestCreateInterviewRequiresJobTitle(t *testing.T) {
 
 func TestCreateInterviewDoesNotConsumeLimitForValidationError(t *testing.T) {
 	repository := &stubInterviewRepository{}
-	service := NewInterviewService(&stubQuestionGenerator{}, repository)
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
 		input.JobTitle = " "
@@ -132,7 +132,7 @@ func TestCreateInterviewDoesNotConsumeLimitForValidationError(t *testing.T) {
 func TestCreateInterviewReturnsCreationLimitError(t *testing.T) {
 	generator := &stubQuestionGenerator{}
 	repository := &stubInterviewRepository{createErr: ErrInterviewCreationLimitReached}
-	service := NewInterviewServiceWithRunner(generator, repository, func(task func()) { task() })
+	service := NewInterviewService(generator, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {}), "client-ip-hash")
 
@@ -145,7 +145,7 @@ func TestCreateInterviewReturnsCreationLimitError(t *testing.T) {
 }
 
 func TestCreateInterviewRequiresQuestionCountBetweenOneAndTen(t *testing.T) {
-	service := NewInterviewService(&stubQuestionGenerator{}, &stubInterviewRepository{})
+	service := NewInterviewService(&stubQuestionGenerator{}, &stubInterviewRepository{}, InterviewServiceConfig{})
 
 	for _, count := range []int{0, 11} {
 		_, err := service.CreateInterview(context.Background(), validCreateInterviewRequest(func(input *model.CreateInterviewRequest) {
@@ -176,7 +176,7 @@ func TestGetInterviewReturnsDetailResponse(t *testing.T) {
 			},
 		},
 	}
-	service := NewInterviewService(&stubQuestionGenerator{}, repository)
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{})
 
 	response, err := service.GetInterview(context.Background(), "interview-id")
 
@@ -221,7 +221,7 @@ func TestGetInterviewHidesQuestionsBeforeInterviewStarts(t *testing.T) {
 			},
 		},
 	}
-	service := NewInterviewServiceWithRunner(&stubQuestionGenerator{}, repository, func(task func()) { task() })
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	response, err := service.GetInterview(context.Background(), "interview-id")
 
@@ -248,7 +248,7 @@ func TestGetInterviewShowsQuestionsAfterInterviewStarts(t *testing.T) {
 			},
 		},
 	}
-	service := NewInterviewServiceWithRunner(&stubQuestionGenerator{}, repository, func(task func()) { task() })
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	response, err := service.GetInterview(context.Background(), "interview-id")
 
@@ -264,7 +264,7 @@ func TestStartInterviewMarksReadyInterviewInProgress(t *testing.T) {
 	repository := &stubInterviewRepository{
 		startResponse: model.CreateInterviewResponse{ID: "interview-id", Status: model.InterviewStatusInProgress},
 	}
-	service := NewInterviewServiceWithRunner(&stubQuestionGenerator{}, repository, func(task func()) { task() })
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	response, err := service.StartInterview(context.Background(), "interview-id")
 
@@ -281,7 +281,7 @@ func TestStartInterviewMarksReadyInterviewInProgress(t *testing.T) {
 
 func TestStartInterviewReturnsNotReady(t *testing.T) {
 	repository := &stubInterviewRepository{startErr: ErrInterviewNotReady}
-	service := NewInterviewServiceWithRunner(&stubQuestionGenerator{}, repository, func(task func()) { task() })
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{Runner: runImmediately})
 
 	_, err := service.StartInterview(context.Background(), "interview-id")
 
@@ -292,7 +292,7 @@ func TestStartInterviewReturnsNotReady(t *testing.T) {
 
 func TestGetInterviewReturnsNotFound(t *testing.T) {
 	repository := &stubInterviewRepository{getErr: ErrInterviewNotFound}
-	service := NewInterviewService(&stubQuestionGenerator{}, repository)
+	service := NewInterviewService(&stubQuestionGenerator{}, repository, InterviewServiceConfig{})
 
 	_, err := service.GetInterview(context.Background(), "missing-id")
 
@@ -311,6 +311,10 @@ func validCreateInterviewRequest(modify func(*model.CreateInterviewRequest)) mod
 	}
 	modify(&input)
 	return input
+}
+
+func runImmediately(task func()) {
+	task()
 }
 
 type stubQuestionGenerator struct {

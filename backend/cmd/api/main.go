@@ -45,7 +45,9 @@ func main() {
 	answerAnalysisQueue := service.NewBackgroundAnswerAnalysisQueue(context.Background(), answerRepository, answerAnalyzer)
 	answerAudioRetention := service.NewAnswerAudioRetentionService(answerRepository, audioStorage)
 	service.StartAnswerAudioRetentionJob(context.Background(), answerAudioRetention, 72*time.Hour, time.Hour)
-	interviewService := service.NewInterviewServiceWithCreationLimit(questionGenerator, interviewRepository, cfg.InterviewCreationLimitPer24H)
+	interviewService := service.NewInterviewService(questionGenerator, interviewRepository, service.InterviewServiceConfig{
+		CreationLimitPer24H: cfg.InterviewCreationLimitPer24H,
+	})
 	questionTTSService := service.NewQuestionTTSService(interviewRepository, questionTTSGenerator)
 	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
 	interviewHandler := handler.NewInterviewHandler(interviewService, answerService, questionTTSService, cfg.IPHashSalt)
