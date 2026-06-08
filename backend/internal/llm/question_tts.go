@@ -24,8 +24,6 @@ const (
 	geminiTTSChannels             = 1
 )
 
-type GenerateQuestionSpeechInput = model.QuestionTTSInput
-
 type QuestionTTSGenerator interface {
 	GenerateQuestionSpeech(ctx context.Context, input model.QuestionTTSInput) ([]byte, error)
 }

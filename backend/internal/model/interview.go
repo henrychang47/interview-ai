@@ -53,18 +53,6 @@ type CreateInterviewResponse struct {
 	Status string `json:"status"`
 }
 
-type Interview struct {
-	ID               string
-	JobTitle         string
-	JobDescription   string
-	UserProfile      string
-	QuestionCount    int
-	QuestionLanguage string
-	Status           string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 type Question struct {
 	ID          string
 	InterviewID string

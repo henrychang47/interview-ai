@@ -32,7 +32,7 @@ func TestGeminiQuestionTTSGeneratorReturnsWAVAudio(t *testing.T) {
 		Backoff:       noBackoff,
 	})
 
-	audio, err := generator.GenerateQuestionSpeech(context.Background(), GenerateQuestionSpeechInput{
+	audio, err := generator.GenerateQuestionSpeech(context.Background(), model.QuestionTTSInput{
 		InterviewID:      "interview-id",
 		QuestionID:       "question-id",
 		QuestionText:     "請介紹你做過的 Go API 專案。",
@@ -87,7 +87,7 @@ func TestGeminiQuestionTTSGeneratorRequiresAPIKey(t *testing.T) {
 		Model:  "gemini-3.1-flash-tts-preview",
 	})
 
-	_, err := generator.GenerateQuestionSpeech(context.Background(), GenerateQuestionSpeechInput{
+	_, err := generator.GenerateQuestionSpeech(context.Background(), model.QuestionTTSInput{
 		QuestionText: "問題一",
 	})
 
@@ -120,7 +120,7 @@ func TestGeminiQuestionTTSGeneratorFallsBackAfterTransientFailures(t *testing.T)
 		Backoff:       noBackoff,
 	})
 
-	audio, err := generator.GenerateQuestionSpeech(context.Background(), GenerateQuestionSpeechInput{
+	audio, err := generator.GenerateQuestionSpeech(context.Background(), model.QuestionTTSInput{
 		QuestionText: "問題一",
 	})
 	if err != nil {
@@ -158,7 +158,7 @@ func TestGeminiQuestionTTSGeneratorLogsCalls(t *testing.T) {
 		Logger:        logger,
 	})
 
-	_, err := generator.GenerateQuestionSpeech(context.Background(), GenerateQuestionSpeechInput{
+	_, err := generator.GenerateQuestionSpeech(context.Background(), model.QuestionTTSInput{
 		InterviewID:  "interview-id",
 		QuestionID:   "question-id",
 		QuestionText: "問題一",
