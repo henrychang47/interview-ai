@@ -29,19 +29,7 @@ type QuestionTTSService interface {
 	GenerateInterviewQuestionSpeech(ctx context.Context, interviewID string) ([]model.QuestionTTSAudio, error)
 }
 
-func NewInterviewHandler(interviewService InterviewService, answerService AnswerService) http.Handler {
-	return NewInterviewHandlerWithTTS(interviewService, answerService, nil)
-}
-
-func NewInterviewHandlerWithTTS(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService) http.Handler {
-	return NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, questionTTSService, "development-ip-hash-salt")
-}
-
-func NewInterviewHandlerWithIPHashSalt(interviewService InterviewService, answerService AnswerService, ipHashSalt string) http.Handler {
-	return NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, nil, ipHashSalt)
-}
-
-func NewInterviewHandlerWithIPHashSaltAndTTS(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService, ipHashSalt string) http.Handler {
+func NewInterviewHandler(interviewService InterviewService, answerService AnswerService, questionTTSService QuestionTTSService, ipHashSalt string) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/", createInterview(interviewService, ipHashSalt))
 	router.Get("/{interviewID}", getInterview(interviewService))

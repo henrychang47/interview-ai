@@ -24,7 +24,7 @@ func TestUploadAnswerReturnsCreatedResponse(t *testing.T) {
 			AudioPath:   "storage/audio/interview-id/question-id.webm",
 		},
 	}
-	handler := NewInterviewHandler(&stubInterviewService{}, answerService)
+	handler := NewInterviewHandler(&stubInterviewService{}, answerService, nil, "test-salt")
 	body, contentType := multipartBody(t, "audio", "answer.webm", "audio/webm", "webm-bytes")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
 	request.Header.Set("Content-Type", contentType)
@@ -65,7 +65,7 @@ func TestUploadAnswerReturnsCreatedResponse(t *testing.T) {
 }
 
 func TestUploadAnswerRequiresMultipartAudio(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{})
+	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{}, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", strings.NewReader(""))
 	request.Header.Set("Content-Type", "multipart/form-data; boundary=missing")
 	response := httptest.NewRecorder()
@@ -77,7 +77,7 @@ func TestUploadAnswerRequiresMultipartAudio(t *testing.T) {
 
 func TestUploadAnswerRejectsOversizedRequest(t *testing.T) {
 	answerService := &stubAnswerService{}
-	handler := NewInterviewHandler(&stubInterviewService{}, answerService)
+	handler := NewInterviewHandler(&stubInterviewService{}, answerService, nil, "test-salt")
 	body, contentType := multipartBodyBytes(t, "audio", "answer.webm", "audio/webm", bytes.Repeat([]byte("a"), maxAnswerAudioBytes+1))
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
 	request.Header.Set("Content-Type", contentType)
@@ -92,7 +92,7 @@ func TestUploadAnswerRejectsOversizedRequest(t *testing.T) {
 }
 
 func TestUploadAnswerMapsValidationErrors(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrUnsupportedAudioType})
+	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrUnsupportedAudioType}, nil, "test-salt")
 	body, contentType := multipartBody(t, "audio", "answer.wav", "audio/wav", "wav-bytes")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
 	request.Header.Set("Content-Type", contentType)
@@ -104,7 +104,7 @@ func TestUploadAnswerMapsValidationErrors(t *testing.T) {
 }
 
 func TestUploadAnswerMapsNotFoundErrors(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrQuestionNotFoundForInterview})
+	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrQuestionNotFoundForInterview}, nil, "test-salt")
 	body, contentType := multipartBody(t, "audio", "answer.webm", "audio/webm", "webm-bytes")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
 	request.Header.Set("Content-Type", contentType)
@@ -116,7 +116,7 @@ func TestUploadAnswerMapsNotFoundErrors(t *testing.T) {
 }
 
 func TestUploadAnswerMapsStorageErrors(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrSaveAnswerAudioFailed})
+	handler := NewInterviewHandler(&stubInterviewService{}, &stubAnswerService{err: service.ErrSaveAnswerAudioFailed}, nil, "test-salt")
 	body, contentType := multipartBody(t, "audio", "answer.webm", "audio/webm", "webm-bytes")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/answer", body)
 	request.Header.Set("Content-Type", contentType)

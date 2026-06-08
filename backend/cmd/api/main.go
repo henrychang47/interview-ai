@@ -48,7 +48,7 @@ func main() {
 	interviewService := service.NewInterviewServiceWithCreationLimit(questionGenerator, interviewRepository, cfg.InterviewCreationLimitPer24H)
 	questionTTSService := service.NewQuestionTTSService(interviewRepository, questionTTSGenerator)
 	answerService := service.NewAnswerService(audioStorage, answerRepository, answerAnalysisQueue)
-	interviewHandler := handler.NewInterviewHandlerWithIPHashSaltAndTTS(interviewService, answerService, questionTTSService, cfg.IPHashSalt)
+	interviewHandler := handler.NewInterviewHandler(interviewService, answerService, questionTTSService, cfg.IPHashSalt)
 
 	slog.Info("starting interview-ai backend", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", server.NewRouter(interviewHandler, "storage/audio")); err != nil {

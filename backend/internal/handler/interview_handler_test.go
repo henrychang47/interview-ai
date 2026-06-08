@@ -19,7 +19,7 @@ func TestCreateInterviewReturnsCreatedResponse(t *testing.T) {
 			ID:     "interview-id",
 			Status: model.InterviewStatusGeneratingQuestions,
 		},
-	}, nil)
+	}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
@@ -52,7 +52,7 @@ func TestCreateInterviewPassesHashedForwardedIP(t *testing.T) {
 			Status: model.InterviewStatusGeneratingQuestions,
 		},
 	}
-	handler := NewInterviewHandlerWithIPHashSalt(stub, nil, "test-salt")
+	handler := NewInterviewHandler(stub, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
@@ -83,7 +83,7 @@ func TestCreateInterviewNormalizesForwardedIPWithPort(t *testing.T) {
 			Status: model.InterviewStatusGeneratingQuestions,
 		},
 	}
-	handler := NewInterviewHandlerWithIPHashSalt(stub, nil, "test-salt")
+	handler := NewInterviewHandler(stub, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go、PostgreSQL、REST API",
@@ -105,7 +105,7 @@ func TestCreateInterviewNormalizesForwardedIPWithPort(t *testing.T) {
 }
 
 func TestCreateInterviewRejectsInvalidJSON(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{`))
 	response := httptest.NewRecorder()
 
@@ -115,7 +115,7 @@ func TestCreateInterviewRejectsInvalidJSON(t *testing.T) {
 }
 
 func TestCreateInterviewReturnsValidationError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrJobTitleRequired}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrJobTitleRequired}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"",
 		"job_description":"需要熟悉 Go",
@@ -130,7 +130,7 @@ func TestCreateInterviewReturnsValidationError(t *testing.T) {
 }
 
 func TestCreateInterviewReturnsLimitError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrInterviewCreationLimitReached}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{err: service.ErrInterviewCreationLimitReached}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go",
@@ -145,7 +145,7 @@ func TestCreateInterviewReturnsLimitError(t *testing.T) {
 }
 
 func TestCreateInterviewReturnsServerError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{err: errors.New("db failed")}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{err: errors.New("db failed")}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{
 		"job_title":"後端工程師",
 		"job_description":"需要熟悉 Go",
@@ -173,7 +173,7 @@ func TestGetInterviewReturnsDetail(t *testing.T) {
 			},
 			Answers: []model.AnswerResponse{},
 		},
-	}, nil)
+	}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
 	response := httptest.NewRecorder()
 
@@ -195,7 +195,7 @@ func TestGetInterviewReturnsDetail(t *testing.T) {
 }
 
 func TestGetInterviewReturnsNotFound(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{getErr: service.ErrInterviewNotFound}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{getErr: service.ErrInterviewNotFound}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodGet, "/missing-id", nil)
 	response := httptest.NewRecorder()
 
@@ -205,7 +205,7 @@ func TestGetInterviewReturnsNotFound(t *testing.T) {
 }
 
 func TestGetInterviewReturnsServerError(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{getErr: errors.New("db failed")}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{getErr: errors.New("db failed")}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodGet, "/interview-id", nil)
 	response := httptest.NewRecorder()
 
@@ -217,7 +217,7 @@ func TestGetInterviewReturnsServerError(t *testing.T) {
 func TestStartInterviewReturnsInProgress(t *testing.T) {
 	handler := NewInterviewHandler(&stubInterviewService{
 		startResponse: model.CreateInterviewResponse{ID: "interview-id", Status: model.InterviewStatusInProgress},
-	}, nil)
+	}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/start", nil)
 	response := httptest.NewRecorder()
 
@@ -236,7 +236,7 @@ func TestStartInterviewReturnsInProgress(t *testing.T) {
 }
 
 func TestStartInterviewReturnsNotReady(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotReady}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotReady}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/start", nil)
 	response := httptest.NewRecorder()
 
@@ -246,7 +246,7 @@ func TestStartInterviewReturnsNotReady(t *testing.T) {
 }
 
 func TestStartInterviewReturnsNotFound(t *testing.T) {
-	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotFound}, nil)
+	handler := NewInterviewHandler(&stubInterviewService{startErr: service.ErrInterviewNotFound}, nil, nil, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/missing-id/start", nil)
 	response := httptest.NewRecorder()
 
@@ -256,9 +256,9 @@ func TestStartInterviewReturnsNotFound(t *testing.T) {
 }
 
 func TestGenerateQuestionTTSReturnsWAVAudio(t *testing.T) {
-	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+	handler := NewInterviewHandler(&stubInterviewService{}, nil, &stubQuestionTTSService{
 		audio: []byte("wav-bytes"),
-	})
+	}, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
 	response := httptest.NewRecorder()
 
@@ -276,9 +276,9 @@ func TestGenerateQuestionTTSReturnsWAVAudio(t *testing.T) {
 }
 
 func TestGenerateQuestionTTSReturnsUnavailableForFallback(t *testing.T) {
-	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+	handler := NewInterviewHandler(&stubInterviewService{}, nil, &stubQuestionTTSService{
 		err: service.ErrQuestionTTSUnavailable,
-	})
+	}, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
 	response := httptest.NewRecorder()
 
@@ -288,9 +288,9 @@ func TestGenerateQuestionTTSReturnsUnavailableForFallback(t *testing.T) {
 }
 
 func TestGenerateQuestionTTSReturnsMissingQuestion(t *testing.T) {
-	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+	handler := NewInterviewHandler(&stubInterviewService{}, nil, &stubQuestionTTSService{
 		err: service.ErrQuestionNotFoundForInterview,
-	})
+	}, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/question-id/tts", nil)
 	response := httptest.NewRecorder()
 
@@ -300,12 +300,12 @@ func TestGenerateQuestionTTSReturnsMissingQuestion(t *testing.T) {
 }
 
 func TestGenerateInterviewQuestionTTSReturnsBase64Audio(t *testing.T) {
-	handler := NewInterviewHandlerWithTTS(&stubInterviewService{}, nil, &stubQuestionTTSService{
+	handler := NewInterviewHandler(&stubInterviewService{}, nil, &stubQuestionTTSService{
 		interviewAudio: []model.QuestionTTSAudio{
 			{QuestionID: "question-1", Audio: []byte("question-1-wav")},
 			{QuestionID: "question-2", Audio: []byte("question-2-wav")},
 		},
-	})
+	}, "test-salt")
 	request := httptest.NewRequest(http.MethodPost, "/interview-id/questions/tts", nil)
 	response := httptest.NewRecorder()
 
